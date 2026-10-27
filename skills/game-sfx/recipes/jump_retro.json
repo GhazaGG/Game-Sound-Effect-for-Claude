@@ -1,0 +1,15 @@
+{
+  "name": "jump_retro",
+  "description": "Platformer jump: detuned square sweeping up 180 -> 520 Hz, short and springy.",
+  "layers": [
+    {
+      "wave": "square", "duty": 0.5, "detune_cents": 8,
+      "freq": [[0, 180], [0.18, 520]],
+      "env": {"attack": 0.002, "hold": 0.03, "release": 0.15, "curve": 1.5},
+      "filters": [{"type": "lowpass", "cutoff": [[0, 2500], [0.18, 6000]]}]
+    }
+  ],
+  "master": {"lufs": -16, "peak_db": -1, "highpass": 80},
+  "vary": {"pitch": 1, "gain_db": 1},
+  "expect": {"duration": [0.12, 0.3], "centroid": [300, 4000]}
+}

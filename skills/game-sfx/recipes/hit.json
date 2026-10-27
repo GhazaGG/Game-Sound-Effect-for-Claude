@@ -1,0 +1,27 @@
+{
+  "name": "hit",
+  "description": "Punch/impact. Layers: noise transient (snap) + saturated sine thump falling 160 -> 55 Hz (weight) + band-passed noise crunch (texture).",
+  "layers": [
+    {
+      "wave": "noise",
+      "env": {"attack": 0.0005, "hold": 0.003, "release": 0.015, "curve": 3},
+      "filters": [{"type": "highpass", "cutoff": 2000}],
+      "gain_db": -4
+    },
+    {
+      "wave": "sine",
+      "freq": [[0, 160], [0.12, 55]],
+      "env": {"attack": 0.001, "hold": 0.01, "release": 0.14, "curve": 2},
+      "drive": 1.5
+    },
+    {
+      "wave": "noise",
+      "env": {"attack": 0.001, "hold": 0.005, "release": 0.09, "curve": 2.5},
+      "filters": [{"type": "bandpass", "cutoff": [[0, 1200], [0.1, 400]], "q": 1.2}],
+      "gain_db": -8
+    }
+  ],
+  "master": {"lufs": -14, "peak_db": -1, "highpass": 40},
+  "vary": {"pitch": 1.5, "gain_db": 2},
+  "expect": {"duration": [0.1, 0.3], "centroid": [150, 2500]}
+}

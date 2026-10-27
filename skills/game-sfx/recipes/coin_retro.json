@@ -1,0 +1,21 @@
+{
+  "name": "coin_retro",
+  "description": "Classic pickup: two square-wave notes a 4th apart (B5 -> E6), quick body, bright decay.",
+  "layers": [
+    {
+      "wave": "square", "duty": 0.5,
+      "freq": [[0, 988], [0.06, 988], [0.06, 1319]],
+      "env": {"attack": 0.001, "hold": 0.06, "release": 0.22, "curve": 2.5},
+      "filters": [{"type": "lowpass", "cutoff": 9000}]
+    },
+    {
+      "wave": "sine",
+      "freq": [[0, 1976], [0.06, 1976], [0.06, 2637]],
+      "env": {"attack": 0.001, "hold": 0.06, "release": 0.16, "curve": 3},
+      "gain_db": -14
+    }
+  ],
+  "master": {"lufs": -16, "peak_db": -1, "highpass": 150},
+  "vary": {"pitch": 0.5, "gain_db": 1},
+  "expect": {"duration": [0.2, 0.4], "centroid": [1500, 6000]}
+}

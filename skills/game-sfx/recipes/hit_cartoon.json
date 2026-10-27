@@ -1,0 +1,102 @@
+{
+  "name": "hit_cartoon",
+  "description": "Cartoon 'bonk': rounded driven thump 300 -> 70 Hz + woody knock (bar modes) + soft cloth slap, small room.",
+  "layers": [
+    {
+      "wave": "sine",
+      "freq": [
+        [
+          0,
+          300
+        ],
+        [
+          0.015,
+          180
+        ],
+        [
+          0.15,
+          70
+        ]
+      ],
+      "env": {
+        "attack": 0.001,
+        "hold": 0.01,
+        "release": 0.16,
+        "curve": 2.5
+      },
+      "drive": 2
+    },
+    {
+      "wave": "sine",
+      "freq": 520,
+      "partials": [
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          2.76,
+          -8,
+          0.5
+        ],
+        [
+          5.4,
+          -16,
+          0.3
+        ]
+      ],
+      "env": {
+        "attack": 0.0005,
+        "hold": 0.002,
+        "release": 0.08,
+        "curve": 3
+      },
+      "gain_db": -5
+    },
+    {
+      "wave": "noise",
+      "env": {
+        "attack": 0.0005,
+        "hold": 0.004,
+        "release": 0.03,
+        "curve": 3
+      },
+      "filters": [
+        {
+          "type": "bandpass",
+          "cutoff": 1800,
+          "q": 0.8
+        },
+        {
+          "type": "lowpass",
+          "cutoff": 7000
+        }
+      ],
+      "gain_db": -8
+    }
+  ],
+  "master": {
+    "lufs": -14,
+    "peak_db": -1,
+    "highpass": 50,
+    "reverb": {
+      "mix": 0.1,
+      "decay": 0.35
+    }
+  },
+  "vary": {
+    "pitch": 1.5,
+    "gain_db": 2
+  },
+  "expect": {
+    "duration": [
+      0.12,
+      0.7
+    ],
+    "centroid": [
+      200,
+      2500
+    ]
+  }
+}

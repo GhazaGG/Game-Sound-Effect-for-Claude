@@ -1,0 +1,9 @@
+{
+  "name": "game-sfx",
+  "version": "0.1.0",
+  "description": "Claude designs game sound effects that actually sound good: layered recipes, a click-proof synth and a doctor that 'hears' via metrics + spectrograms. Zero dependencies.",
+  "author": {"name": "GhazaGG"},
+  "repository": "https://github.com/GhazaGG/Game-Sound-Effect-for-Claude",
+  "license": "MIT",
+  "keywords": ["sfx", "sound-effects", "game-audio", "gamedev", "sound-design", "skill"]
+}

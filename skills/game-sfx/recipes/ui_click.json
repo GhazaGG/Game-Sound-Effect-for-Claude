@@ -1,0 +1,20 @@
+{
+  "name": "ui_click",
+  "description": "Button click: tiny noise tick + short falling triangle blip. No tail, high-passed so it never sounds muddy.",
+  "layers": [
+    {
+      "wave": "noise",
+      "env": {"attack": 0.0005, "hold": 0.001, "release": 0.006, "curve": 3},
+      "filters": [{"type": "highpass", "cutoff": 3000}, {"type": "lowpass", "cutoff": 9000}],
+      "gain_db": -6
+    },
+    {
+      "wave": "triangle",
+      "freq": [[0, 2000], [0.03, 1700]],
+      "env": {"attack": 0.0005, "hold": 0.002, "release": 0.025, "curve": 3}
+    }
+  ],
+  "master": {"lufs": -20, "peak_db": -1, "highpass": 300},
+  "vary": {"pitch": 0.5, "gain_db": 1},
+  "expect": {"duration": [0.015, 0.06], "centroid": [1000, 5000]}
+}

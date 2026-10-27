@@ -1,0 +1,12 @@
+{
+  "name": "game-sfx",
+  "owner": {"name": "GhazaGG"},
+  "description": "Game sound effects designed by Claude, zero dependencies.",
+  "plugins": [
+    {
+      "name": "game-sfx",
+      "source": "./",
+      "description": "Game sound effects designed by Claude: recipes, synth, and doctor. Zero dependencies."
+    }
+  ]
+}
