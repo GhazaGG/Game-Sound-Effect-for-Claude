@@ -29,3 +29,17 @@ bad = [1.0 if (i // 50) % 2 else -1.0 for i in range(4410)]
 levels = {lv for lv, _ in doctor.analyze(bad, 44100)[1]}
 assert "FAIL" in levels, levels
 print("ok doctor flags bad sound")
+
+# slicer finds isolated hits in a noisy "recording"; the limiter holds the ceiling
+import random  # noqa: E402
+import slice as slicer  # noqa: E402
+
+rng = random.Random(1)
+rec = [rng.uniform(-0.002, 0.002) for _ in range(sfx.SR * 2)]
+for t in (0.3, 0.9, 1.5):
+    for i in range(2000):
+        rec[int(t * sfx.SR) + i] += rng.uniform(-1, 1) * 0.8 * (1 - i / 2000) ** 3
+hits = slicer.detect(rec, 0.06, 0.3)
+assert [round(h["start"] / sfx.SR, 1) for h in hits] == [0.3, 0.9, 1.5], hits
+assert max(abs(v) for v in sfx.limit([v * 4 for v in rec], 0.89)) <= 0.89 + 1e-9
+print("ok slicer + limiter")

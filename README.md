@@ -8,7 +8,7 @@ Ask Claude for a coin sound and you usually get a raw beep that clicks, hisses a
 - **Synth.** A click-proof synth with band-limited oscillators, envelopes that always end at zero, DC removal, LUFS-matched loudness and tail trimming.
 - **Doctor.** Measures peak, LUFS, crest, brightness and harsh/aliasing energy, then draws a **spectrogram PNG**. Claude reads that picture to check its own work.
 
-Everything is **pure Python stdlib**: no pip install, no API key, works offline. Output is game-ready WAV for Godot, Unity, Unreal, Phaser and anything else.
+The synth is **pure Python stdlib**: no pip install, no API key, works offline. For realistic foley (hooves, footsteps, water) the **sample pipeline** finds CC0 recordings on Freesound, cuts out the cleanest hits and makes them game-ready (needs a free Freesound key + ffmpeg). Output is game-ready WAV for Godot, Unity, Unreal, Phaser and anything else.
 
 ## Install
 

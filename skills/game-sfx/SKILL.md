@@ -54,6 +54,38 @@ When the user says something like "the coin is too shrill" or "the jump needs mo
 3. Re-render to the **same file name**, so the game's references keep working.
 4. Add one line to Decisions in `SOUND_STYLE.md` (e.g. "coin: lowered a 4th, players found it shrill"), so future sounds don't repeat the mistake.
 
+## Synth or samples: choose before designing
+
+**The synth cannot fake real physical foley.** Hooves, footsteps on real surfaces, cloth, water, creatures and voices all come out sounding like toys. Choose the engine by what the sound must be:
+
+| Use the **synth** (`sfx.py`) | Use **samples** (`freesound.py` + `slice.py`) |
+|---|---|
+| UI, menus, stingers, jingles | Footsteps, hooves, impacts on real materials |
+| Retro, chiptune and cartoon styles | Grounded or realistic styles |
+| Magic, sci-fi, abstract feedback | Water, cloth, wood, foliage, weather, animals |
+
+You can also go **hybrid**: a `"wave": "sample"` layer inside a synth patch plays a WAV. It can be pitched, filtered, enveloped and stacked with synth layers or other samples. Use it to add punch to a recording, or to combine two recordings into a surface that has no recording of its own.
+
+### Sample workflow
+
+1. **Search for CC0 sounds only**, so there are no license questions:
+   `python <skill>/scripts/freesound.py search "horse hooves gravel"`
+   - Needs `FREESOUND_API_KEY`. The key is free: https://freesound.org/apiv2/apply. Ask the user to set it; never ask them to paste it into chat.
+   - The search ANDs every word, so start broad ("hooves", "horse trot") and narrow afterwards.
+   - Prefer high rating × downloads, and titles that name the exact surface.
+2. **Download**: `python <skill>/scripts/freesound.py get <id> <id> -o sfx/sources`. This saves the HQ previews and appends to `sfx/sources/CREDITS.md`.
+3. **List the hits** in each recording: `python <skill>/scripts/slice.py sfx/sources/<file> --list`. Each hit is scored on:
+   - `peak`: loudness relative to the loudest hit.
+   - `clean`: dB above whatever comes before it. Above 25 dB means isolated, below 10 dB means overlapping.
+   - `decay`: dB it falls before the next hit.
+4. **Pick and render**: `slice.py <files> -o <audio folder> --name hoof_Dirt --pick 0:29,0:18,... --png`. The slicer trims, fades, cuts the room tail at `--tail-db`, high-passes, and normalizes loudness with up to `--limit-db` of peak limiting. Four different real hits sound better than four pitch-shifted copies of one.
+5. **Save the commands** in `sfx/patches/<group>.sh`. The script is the editable source, so the whole set can be rebuilt or re-picked later.
+
+Limits to tell the user about:
+- Sharp clicks measure 2-4 dB quieter in LUFS than they sound, so match those by ear.
+- A surface with no recording needs a hybrid patch.
+- You cannot hear the result: always hand the user an A/B file and ask.
+
 ## Workflow
 
 1. **Classify** the request into a category from the table below. Take the style from `SOUND_STYLE.md`; if there isn't one, do Step 0 first.

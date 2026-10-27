@@ -127,6 +127,27 @@ def reverb(x, mix, decay, circular=False):
     return out[len(x):] if circular else out
 
 
+_audio = {}
+
+
+def load_audio(path):
+    """Any audio file -> mono float list at SR. WAV at SR is read natively; anything else needs ffmpeg."""
+    if path not in _audio:
+        if path.lower().endswith(".wav"):
+            x, sr, _ = doctor.read_wav(path)
+            if sr == SR:
+                _audio[path] = x
+                return x
+        import subprocess
+        try:
+            raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-ac", "1", "-ar", str(SR), "-f", "s16le", "-"],
+                                 capture_output=True, check=True).stdout
+        except FileNotFoundError:
+            sys.exit("ffmpeg is needed to read this file (https://ffmpeg.org); or convert it to 44.1 kHz WAV first")
+        _audio[path] = [v / 32768 for v in struct.unpack(f"<{len(raw) // 2}h", raw)]
+    return _audio[path]
+
+
 def render_layer(layer, rng, pitch, gain_db):
     partials = layer.get("partials")
     if partials:  # [[ratio, gain_db, release_scale?], ...]: additive/modal timbres (wood, bell, metal)
@@ -143,15 +164,55 @@ def render_layer(layer, rng, pitch, gain_db):
         return mix
 
     kind = layer.get("wave", "sine")
-    if kind not in WAVES:
-        raise ValueError(f"unknown wave {kind!r}, use one of {WAVES}")
-    env = layer.get("env", {})
+    if kind not in WAVES + ("sample",):
+        raise ValueError(f"unknown wave {kind!r}, use one of {WAVES + ('sample',)}")
+    if kind == "sample":  # a recording; pitch = playback rate, so higher is also shorter
+        src = load_audio(layer["file"])
+        src = src[int(layer.get("start", 0) * SR):]
+        if "length" in layer:
+            src = src[: int(layer["length"] * SR)]
+        x = [src[int(i * pitch)] for i in range(int((len(src) - 1) / pitch))]
+        dur = len(x) / SR
+        env = {"attack": 0.001, "hold": max(0.0, dur - 0.011), "release": 0.01, "curve": 1, **layer.get("env", {})}
+    else:
+        env = layer.get("env", {})
     a = max(env.get("attack", 0.002), 0.0005)  # floor = no start click
     h = max(env.get("hold", 0.0), 0.0)
     r = max(env.get("release", 0.1), 0.005)
     curve = env.get("curve", 2.0)
     n = int((a + h + r) * SR)
+    if kind == "sample":
+        n = min(n, len(x))
+        x = x[:n]
+        r = max(0.005, n / SR - a - h)
+    else:
+        x = synth(layer, kind, n, pitch, rng)
 
+    for flt in layer.get("filters", []):
+        if flt.get("type") not in FILTERS:
+            raise ValueError(f"unknown filter {flt.get('type')!r}, use one of {FILTERS}")
+        x = svf(x, flt["type"], sample_curve(flt["cutoff"], n, pitch), flt.get("q", 0.707))
+
+    drive = layer.get("drive", 0)
+    if drive:
+        norm = math.tanh(1 + drive)
+        x = [math.tanh(v * (1 + drive)) / norm for v in x]
+
+    g = 10 ** ((layer.get("gain_db", 0) + gain_db) / 20)
+    ai, hi = a * SR, (a + h) * SR
+    rn = max(n - hi, 1)
+    for s in range(n):
+        if s < ai:
+            amp = s / ai
+        elif s < hi:
+            amp = 1.0
+        else:
+            amp = max(0.0, 1 - (s - hi) / rn) ** curve  # always lands on 0 = no end click
+        x[s] *= amp * g
+    return x
+
+
+def synth(layer, kind, n, pitch, rng):
     freqs = sample_curve(layer.get("freq", 440), n, pitch)
     vib = layer.get("vibrato")
     if vib:
@@ -168,28 +229,6 @@ def render_layer(layer, rng, pitch, gain_db):
         x = [(u + d) * 0.5 for u, d in zip(up, dn)]
     else:
         x = oscillator(kind, freqs, duty, rng, fm)
-
-    for flt in layer.get("filters", []):
-        if flt.get("type") not in FILTERS:
-            raise ValueError(f"unknown filter {flt.get('type')!r}, use one of {FILTERS}")
-        x = svf(x, flt["type"], sample_curve(flt["cutoff"], n, pitch), flt.get("q", 0.707))
-
-    drive = layer.get("drive", 0)
-    if drive:
-        norm = math.tanh(1 + drive)
-        x = [math.tanh(v * (1 + drive)) / norm for v in x]
-
-    g = 10 ** ((layer.get("gain_db", 0) + gain_db) / 20)
-    ai, hi = a * SR, (a + h) * SR
-    rn = n - hi
-    for s in range(n):
-        if s < ai:
-            amp = s / ai
-        elif s < hi:
-            amp = 1.0
-        else:
-            amp = max(0.0, 1 - (s - hi) / rn) ** curve  # always lands on 0 = no end click
-        x[s] *= amp * g
     return x
 
 
@@ -218,21 +257,45 @@ def render(patch, seed=0, variant=False):
         for i, v in enumerate(x if fixed else x[: max(0, n - s)]):
             buf[(s + i) % n] += v  # fixed duration = loop: tails wrap to the start
 
+    return finish(buf, master, bool(fixed), -rng.uniform(0, vary.get("gain_db", 0)))
+
+
+def limit(x, ceiling, look=0.001, release=0.05):
+    """Peak limiter: gain ramps down over `look` s before an over, recovers over `release` s."""
+    if max((abs(v) for v in x), default=0) <= ceiling:
+        return x
+    n, w = len(x), max(1, int(look * SR))
+    g = [min(1.0, ceiling / abs(v)) if v else 1.0 for v in x]
+    for i in range(n - 2, -1, -1):  # backward: start reducing `w` samples early, no step = no click
+        g[i] = min(g[i], g[i + 1] + 1.0 / w)
+    rel = 1 - math.exp(-1 / (release * SR))
+    for i in range(1, n):  # forward: smooth recovery
+        g[i] = min(g[i], g[i - 1] + (1 - g[i - 1]) * rel)
+    return [v * gi for v, gi in zip(x, g)]
+
+
+def finish(buf, master, fixed=False, extra_db=0.0):
+    """Master stage: high-pass, room, tail trim, loudness/peak normalize, end fade."""
+    n = len(buf)
+    rv = master.get("reverb")
     hp = [master.get("highpass", 20)] * (2 * n if fixed else n)
     buf = svf(buf + buf, "highpass", hp, 0.707)[n:] if fixed else svf(buf, "highpass", hp, 0.707)  # kills DC + rumble
     if rv:
-        buf = reverb(buf, rv.get("mix", 0.15), rv["decay"], circular=bool(fixed))
+        buf = reverb(buf, rv.get("mix", 0.15), rv["decay"], circular=fixed)
 
     peak = max(abs(v) for v in buf) or 1.0
     if not fixed:  # trim tail below -60 dB, before measuring loudness
         end = max((i for i, v in enumerate(buf) if abs(v) > peak * 1e-3), default=0)
         buf = buf[: end + 1]
 
-    gain = 10 ** (master.get("peak_db", -1.0) / 20) / peak
+    ceiling = 10 ** (master.get("peak_db", -1.0) / 20)
+    gain = ceiling / peak
     if "lufs" in master:
-        gain = min(gain, 10 ** ((master["lufs"] - doctor.loudness(buf, SR)) / 20))
-    gain *= 10 ** (-rng.uniform(0, vary.get("gain_db", 0)) / 20)
-    buf = [v * gain for v in buf]
+        # Sharp transients (real hoofbeats: crest 20+ dB) can't reach the target under the ceiling,
+        # so allow up to `limit_db` of peak limiting instead of leaving the sound quiet.
+        gain = min(gain * 10 ** (master.get("limit_db", 6) / 20), 10 ** ((master["lufs"] - doctor.loudness(buf, SR)) / 20))
+    gain *= 10 ** (extra_db / 20)
+    buf = limit([v * gain for v in buf], ceiling)
 
     if fixed:
         return buf  # seamless loop: end flows into start, a fade would make a gap
@@ -261,6 +324,9 @@ def main():
 
     with open(args.patch, encoding="utf-8") as f:
         patch = json.load(f)
+    for layer in patch["layers"]:  # sample files are relative to the patch
+        if "file" in layer:
+            layer["file"] = os.path.join(os.path.dirname(os.path.abspath(args.patch)), layer["file"])
     name = patch.get("name") or os.path.splitext(os.path.basename(args.patch))[0]
     os.makedirs(args.out, exist_ok=True)
 
