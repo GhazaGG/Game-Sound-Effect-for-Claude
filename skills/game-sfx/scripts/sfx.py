@@ -270,7 +270,11 @@ def main():
         x = render(patch, seed, variant)
         path = os.path.join(args.out, stem + ".wav")
         write_wav(path, x)
-        metrics, issues = doctor.analyze(x, SR, patch.get("expect"))
+        expect = dict(patch.get("expect") or {})
+        if variant and "lufs" in expect:  # variants are deliberately up to vary.gain_db quieter
+            lo, hi = expect["lufs"]
+            expect["lufs"] = [lo - patch.get("vary", {}).get("gain_db", 0), hi]
+        metrics, issues = doctor.analyze(x, SR, expect)
         print(doctor.report(path, metrics, issues))
         if args.png:
             doctor.write_png(x, SR, os.path.join(args.out, stem + ".png"))
