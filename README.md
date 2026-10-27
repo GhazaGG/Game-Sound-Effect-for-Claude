@@ -67,6 +67,16 @@ Styles are first-class. Tell Claude your game's look and every sound comes from 
 
 [SKILL.md](skills/game-sfx/SKILL.md) has a recipe table for 12 more categories: laser, explosion, power-up, hurt, death, jingle, footstep, whoosh, magic and the UI hover, confirm and error sounds.
 
+## It learns your game
+
+Claude doesn't make sounds blind. On first use it does three things:
+
+1. **Detects your engine** (Godot, Unity, Unreal, Phaser, GameMaker, LÖVE, Pygame) and its audio folder.
+2. **Reads your project.** It looks at the README, design docs and art, audits the sounds you already have, and greps your code for gameplay events (`jump`, `collect`, `hit`...) that have no sound yet.
+3. **Writes `sfx/SOUND_STYLE.md`**, a short sound bible covering style, palette, world materials, music key and loudness tiers. Every future sound follows it, so they all sound like one game.
+
+Every sound keeps its editable source in `sfx/patches/<name>.json`. To change one, say "the coin is too shrill" and Claude edits the patch, re-renders it to the same file and logs the decision. Or edit the JSON yourself.
+
 ## How it works
 
 ```

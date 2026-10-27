@@ -9,12 +9,58 @@ You cannot hear. This skill replaces hearing with three things: **proven recipes
 
 Scripts live next to this file: `scripts/sfx.py` (render) and `scripts/doctor.py` (check). Both are Python 3.8+ stdlib only.
 
+## Step 0: know the project (before the first sound)
+
+Generic sounds come from not knowing the game. Before designing anything, look for `sfx/SOUND_STYLE.md` in the project.
+
+**If it exists, read it and follow it.** It is the project's sound bible, and every new sound must belong to that family.
+
+**If it doesn't exist, build it.** Do this once per project and keep it short:
+
+1. **Engine and audio folder.** Detect the engine from files in the project, then use its usual audio folder (or the one the project already uses):
+
+   | File | Engine | Audio folder |
+   |---|---|---|
+   | `project.godot` | Godot | `audio/sfx/` |
+   | `ProjectSettings/ProjectVersion.txt` | Unity | `Assets/Audio/SFX/` |
+   | `*.uproject` | Unreal | `Content/Audio/SFX/` |
+   | `package.json` with phaser/pixi/howler | Web | `public/assets/sfx/`, plus OGG |
+   | `*.yyp` | GameMaker | `sounds/` |
+   | `conf.lua` / `main.lua` | LÖVE | `assets/sfx/` |
+   | `import pygame` | Pygame | `assets/sfx/` |
+2. **Identity.** Read the README, design docs and store text. Glance at the sprites and art folder: they show the style better than prose does. Note the theme, mood, setting, world materials (wood, stone, metal, dirt, water, cloth, magic), and the music's key and tempo if there is music.
+3. **Existing sounds.** Run the doctor over them: `doctor.py <audio folder>/*.wav --png`. Keep what works. The good ones show what the project already sounds like.
+4. **Missing sounds.** Grep the game code for gameplay events and for where sounds are already played. Look for jump, land, collect, pickup, coin, hit, hurt, damage, die, attack, shoot, click, button, open, close, win, lose, level, spawn, dash and step. Also look for the engine's play calls: `AudioStreamPlayer`, `PlayOneShot`, `this.sound.play`, `love.audio.play`, `pygame.mixer`. List the events that have no sound yet, ranked by how often the player triggers them.
+5. **Write `sfx/SOUND_STYLE.md`** from [templates/SOUND_STYLE.md](templates/SOUND_STYLE.md). Fill in everything you found, ask only about what you couldn't find (usually just the style, in one question), and show the user the sound list before generating it.
+
+Layout in the user's project:
+
+```
+sfx/SOUND_STYLE.md        sound bible: style, palette, materials, loudness, decisions
+sfx/patches/<name>.json   one patch per sound (the editable source)
+<audio folder>/<name>.wav rendered output that the game loads
+```
+
+## Changing a sound later
+
+When the user says something like "the coin is too shrill" or "the jump needs more bounce":
+
+1. Open `sfx/patches/<name>.json`.
+2. Translate the words into parameters. For example:
+   - shrill → lower the notes or the FM index, low-pass at 6-8 kHz
+   - weak → add a driven sub layer or a longer body
+   - cheap/generic → add a layer or partials, a small room, pitch that moves
+   - too long → shorter release, less reverb
+3. Re-render to the **same file name**, so the game's references keep working.
+4. Add one line to Decisions in `SOUND_STYLE.md` (e.g. "coin: lowered a 4th, players found it shrill"), so future sounds don't repeat the mistake.
+
 ## Workflow
 
-1. **Classify** the request into a category from the table below, and **pin the style** (see Style). If the game's style isn't known, ask once: it is the biggest single reason sounds come out generic.
-2. **Start from a recipe** in `recipes/` if one fits; copy it into the project (e.g. `sfx/patches/`) and edit. Otherwise write a patch using the category table.
-3. **Render with a picture**:
-   `python <skill>/scripts/sfx.py patch.json -o assets/sfx --png`
+1. **Classify** the request into a category from the table below. Take the style from `SOUND_STYLE.md`; if there isn't one, do Step 0 first.
+2. **Start from a recipe** in `recipes/` that matches the style. Copy it to `sfx/patches/<name>.json` and edit it for the game's materials and palette. Otherwise write a patch using the category table.
+3. **Render with a picture** into a preview folder while you iterate:
+   `python <skill>/scripts/sfx.py sfx/patches/<name>.json -o sfx/preview --png`
+   Once it's right, render the final version (without `--png`) with `-o <audio folder>`. `sfx/preview/` is scratch space, so suggest adding it to `.gitignore`.
 4. **Read the doctor report and open the PNG.** Fix every FAIL/WARN. Check the picture matches intent: the pitch moves the right way, the transient is at the start, the tail dies out.
 5. **Iterate** 1-3 times, changing one thing at a time. Tell the user what you changed and why in sound terms ("lowered the thump to 60 Hz for more weight").
 6. **Variants** for anything heard often (footsteps, hits, pickups): `--variants 4` writes `name_01..04.wav` with pitch/gain variation from the patch's `vary`. Play them round-robin in the game, never the same one twice in a row.
