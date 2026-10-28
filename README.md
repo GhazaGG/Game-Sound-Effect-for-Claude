@@ -91,6 +91,13 @@ request → synth or samples?
 → preview.py (A/B in the game's rhythm) → you listen → your assets/
 ```
 
+## Privacy & network
+
+- **Offline by default.** `sfx.py`, `doctor.py`, `slice.py` and `preview.py` never touch the network. They read and write only the files you point them at.
+- **`freesound.py` is the only script that goes online.** It calls `https://freesound.org/apiv2` (search, sound info) and downloads the preview files it links to. It sends nothing else: no telemetry, no project files.
+- **Your Freesound key** is read from the `FREESOUND_API_KEY` environment variable. On Windows, if it isn't in the environment, it is read from the user's registry environment. The key is sent only to freesound.org in the `Authorization` header and is never printed or written to disk.
+- **External programs:** `ffmpeg` / `ffprobe` (if installed) decode non-WAV audio. They are called with argument lists, never through a shell.
+
 ## Roadmap
 
 - [ ] More tested recipes (explosion, laser, footsteps per surface, magic)
