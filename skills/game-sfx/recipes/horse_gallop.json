@@ -1,6 +1,6 @@
 {
   "name": "horse_gallop",
-  "description": "Seamless 4-stride gallop loop (~2.4 strides/s, 4 footfalls per stride, accent on the leading foreleg). Each hoof = click + resonant 'clop' + low thump + dirt scuff, humanized per footfall.",
+  "description": "Procedural PLACEHOLDER, not for shipping: synth hooves sound toy-like. For real hooves use samples (hoof_dirt_foley.json, SKILL.md 'Synth or samples'). Kept as a quick stand-in: a seamless 4-stride gallop loop.",
   "duration": 1.68,
   "layers": [
     {

@@ -1,6 +1,5 @@
 """Every recipe renders cleanly, deterministically, and variants differ.  python tests/test_recipes.py"""
 import glob
-import json
 import os
 import sys
 
@@ -11,7 +10,7 @@ import sfx  # noqa: E402
 recipes = sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "skills", "game-sfx", "recipes", "*.json")))
 assert recipes, "no recipes found"
 for path in recipes:
-    patch = json.load(open(path, encoding="utf-8"))
+    patch = sfx.load_patch(path)
     x = sfx.render(patch)
     m, issues = doctor.analyze(x, sfx.SR, patch.get("expect"))
     bad = [msg for lv, msg in issues if lv != "OK"]
@@ -43,3 +42,11 @@ hits = slicer.detect(rec, 0.06, 0.3)
 assert [round(h["start"] / sfx.SR, 1) for h in hits] == [0.3, 0.9, 1.5], hits
 assert max(abs(v) for v in sfx.limit([v * 4 for v in rec], 0.89)) <= 0.89 + 1e-9
 print("ok slicer + limiter")
+
+# typos in a patch are errors, not silently ignored keys
+try:
+    sfx.validate({"layers": [{"wave": "sine", "filter": [], "env": {"decay": 0.2}}]})
+    raise AssertionError("typo accepted")
+except ValueError as e:
+    assert "'filters'" in str(e) and "'release'" in str(e), e
+print("ok patch validation")

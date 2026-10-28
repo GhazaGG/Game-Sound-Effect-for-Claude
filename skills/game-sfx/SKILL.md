@@ -1,13 +1,27 @@
 ---
 name: game-sfx
-description: Design and render game sound effects (coin, jump, hit, UI click, footsteps, explosions, lasers, magic, horse gallop...) as game-ready WAV files, and audit existing sound files. Use whenever the user wants a sound effect, SFX, audio feedback, or game audio, or says their game sounds are bad. Zero dependencies, offline, no API key.
+description: Design and render game sound effects (coin, jump, hit, UI click, footsteps, hooves, explosions, lasers, magic...) as game-ready WAV files, from a synth or from CC0 recordings (Freesound), and audit existing sound files. Use whenever the user wants a sound effect, SFX, foley, audio feedback, or game audio, or says their game sounds are bad.
 ---
 
 # Game SFX
 
-You cannot hear. This skill replaces hearing with three things: **proven recipes**, a **synth that makes the classic mistakes impossible** (clicks, aliasing, DC, clipping, silent tails), and a **doctor** that measures the result and draws a spectrogram you can look at.
+You cannot hear. This skill replaces hearing with four things:
+- **proven recipes**
+- a **synth that makes the classic mistakes impossible** (clicks, aliasing, DC, clipping, silent tails)
+- a **sample pipeline** for real-world sounds
+- a **doctor** that measures the result and draws a spectrogram you can look at
 
-Scripts live next to this file: `scripts/sfx.py` (render) and `scripts/doctor.py` (check). Both are Python 3.8+ stdlib only.
+The user's ears are the final judge, so always hand them a preview.
+
+Scripts live next to this file (Python 3.8+):
+
+| Script | Job | Needs |
+|---|---|---|
+| `scripts/sfx.py` | Render a JSON patch: synth layers, sample layers, or both | stdlib |
+| `scripts/doctor.py` | Check any sound file and draw a spectrogram | stdlib; ffmpeg for float WAV, OGG, MP3 |
+| `scripts/freesound.py` | Search and download CC0 recordings | `FREESOUND_API_KEY` |
+| `scripts/slice.py` | Cut clean single hits out of a recording | ffmpeg for non-WAV sources |
+| `scripts/preview.py` | Lay sounds out as the game plays them (gallop, walk, sequence), optionally old vs new | stdlib |
 
 ## Step 0: know the project (before the first sound)
 
@@ -22,7 +36,7 @@ Generic sounds come from not knowing the game. Before designing anything, look f
    | File | Engine | Audio folder |
    |---|---|---|
    | `project.godot` | Godot | `audio/sfx/` |
-   | `ProjectSettings/ProjectVersion.txt` | Unity | `Assets/Audio/SFX/` |
+   | `ProjectSettings/ProjectVersion.txt` | Unity | `Assets/Audio/SFX/`, or `Assets/Resources/Audio/` if code loads clips by name |
    | `*.uproject` | Unreal | `Content/Audio/SFX/` |
    | `package.json` with phaser/pixi/howler | Web | `public/assets/sfx/`, plus OGG |
    | `*.yyp` | GameMaker | `sounds/` |
@@ -64,7 +78,16 @@ When the user says something like "the coin is too shrill" or "the jump needs mo
 | Retro, chiptune and cartoon styles | Grounded or realistic styles |
 | Magic, sci-fi, abstract feedback | Water, cloth, wood, foliage, weather, animals |
 
-You can also go **hybrid**: a `"wave": "sample"` layer inside a synth patch plays a WAV. It can be pitched, filtered, enveloped and stacked with synth layers or other samples. Use it to add punch to a recording, or to combine two recordings into a surface that has no recording of its own.
+You can also go **hybrid**: a `"wave": "sample"` layer inside a synth patch plays a WAV. It can be pitched, filtered, enveloped and stacked with synth layers or other samples.
+
+### The foley pattern (proven by ear)
+
+**One shared impact + a recorded surface texture + a small room.** In a real project, raw single-recording cuts sounded like six different horses. This layered version is the one the user approved, so start every footstep or hoof set from [recipes/hoof_dirt_foley.json](recipes/hoof_dirt_foley.json):
+
+1. **Impact layer.** The same hard hits (e.g. hooves or shoes on stone) for every surface, so it's the same creature everywhere. Muffle it on soft ground: low-pass about 3.5 kHz for dirt, about 2.5 kHz for water and snow, 1.8 kHz for grass and mud. Keep it bright on stone.
+2. **Texture layer.** A slice of the surface itself: grit, grass, squelch, splash, crunch.
+3. **Room.** `reverb` mix 0.04-0.06, decay 0.3. This glues the two layers into one event.
+4. **Variants.** Give `file` a list of 4 cuts per layer. `--variants 4` then pairs cut *i* of each layer, so every variant is a different real footfall.
 
 ### Sample workflow
 
@@ -79,22 +102,31 @@ You can also go **hybrid**: a `"wave": "sample"` layer inside a synth patch play
    - `clean`: dB above whatever comes before it. Above 25 dB means isolated, below 10 dB means overlapping.
    - `decay`: dB it falls before the next hit.
 4. **Pick and render**: `slice.py <files> -o <audio folder> --name hoof_Dirt --pick 0:29,0:18,... --png`. The slicer trims, fades, cuts the room tail at `--tail-db`, high-passes, and normalizes loudness with up to `--limit-db` of peak limiting. Four different real hits sound better than four pitch-shifted copies of one.
+   For the foley pattern, slice into a working folder (`-o sfx/sources/hits`) and point the patch's `file` lists at those cuts.
 5. **Save the commands** in `sfx/patches/<group>.sh`. The script is the editable source, so the whole set can be rebuilt or re-picked later.
+6. **Preview by ear.** Lay the set out the way the game plays it, with the old version first if there is one:
+   ```
+   python <skill>/scripts/preview.py "<audio>/hoof_Dirt_*.wav" "<audio>/hoof_Rock_*.wav" \
+     --before "<old>/hoof_Dirt_*.wav" "<old>/hoof_Rock_*.wav" --pattern gallop -o sfx/preview/hooves_ab.wav
+   ```
+   - Patterns: `gallop`, `canter`, `trot`, `walk`, and `seq` (one after another, for UI and pickups).
+   - Give the user the file path and the printed timeline, and ask which parts work.
+   - Their verdict outranks every metric.
 
 Limits to tell the user about:
 - Sharp clicks measure 2-4 dB quieter in LUFS than they sound, so match those by ear.
 - A surface with no recording needs a hybrid patch.
-- You cannot hear the result: always hand the user an A/B file and ask.
+- You cannot hear the result: never call a sound good before the user has listened to it.
 
 ## Workflow
 
-1. **Classify** the request into a category from the table below. Take the style from `SOUND_STYLE.md`; if there isn't one, do Step 0 first.
-2. **Start from a recipe** in `recipes/` that matches the style. Copy it to `sfx/patches/<name>.json` and edit it for the game's materials and palette. Otherwise write a patch using the category table.
+1. **Classify** the request into a category from the table below. Take the style from `SOUND_STYLE.md`; if there isn't one, do Step 0 first. **Then choose synth or samples** (see above). Real-world foley goes down the sample path; the synth would make it sound like a toy.
+2. **Start from a recipe** in `recipes/` that matches the style. Copy it to `sfx/patches/<name>.json` and edit it for the game's materials and palette. Otherwise write a patch using the category table. `sfx.py` rejects unknown keys, so a typo fails loudly instead of being ignored.
 3. **Render with a picture** into a preview folder while you iterate:
    `python <skill>/scripts/sfx.py sfx/patches/<name>.json -o sfx/preview --png`
    Once it's right, render the final version (without `--png`) with `-o <audio folder>`. `sfx/preview/` is scratch space, so suggest adding it to `.gitignore`.
 4. **Read the doctor report and open the PNG.** Fix every FAIL/WARN. Check the picture matches intent: the pitch moves the right way, the transient is at the start, the tail dies out.
-5. **Iterate** 1-3 times, changing one thing at a time. Tell the user what you changed and why in sound terms ("lowered the thump to 60 Hz for more weight").
+5. **Iterate** 1-3 times, changing one thing at a time. Tell the user what you changed and why in sound terms ("lowered the thump to 60 Hz for more weight"). Then make a `preview.py` file and let them listen.
 6. **Variants** for anything heard often (footsteps, hits, pickups): `--variants 4` writes `name_01..04.wav` with pitch/gain variation from the patch's `vary`. Play them round-robin in the game, never the same one twice in a row.
 7. **Wire it up** in the engine (see Delivery) and keep the patch JSON in the repo so the sound can be tweaked later.
 
@@ -128,7 +160,8 @@ Audit sounds the user already has: `python <skill>/scripts/doctor.py assets/sfx/
 
 | Field | Meaning |
 |---|---|
-| `wave` | `sine` (pure, thin alone), `triangle` (soft), `square` (+`duty`, chiptune), `saw` (buzzy), `noise` (white; shape it with filters) |
+| `wave` | `sine` (pure, thin alone), `triangle` (soft), `square` (+`duty`, chiptune), `saw` (buzzy), `noise` (white; shape it with filters), `sample` (a recording, see `file`) |
+| `file`, `start`, `length` | Sample layers only. `file` is a path relative to the patch, or a **list** of paths: variant *i* uses entry *i* (round-robin). `start` and `length` crop it, in seconds. The pitch of a sample is its playback rate (linear interpolation), so higher also means shorter. Without `env`, the whole sample plays with 1 ms / 10 ms fades. |
 | `freq`, `cutoff` | A number, or `[[t, value], ...]` breakpoints in seconds from the layer start. Sweeps are exponential. Two points with the same `t` make an instant step (arpeggios). |
 | `env` | `attack` (min 0.5 ms), `hold` at full level, `release` to exactly zero. `curve` 1 = linear fade, 2-3 = percussive. Layer length = attack + hold + release. |
 | `filters` | Applied in order. `lowpass` / `highpass` / `bandpass`; `q` 0.7 = gentle, 4-8 = resonant ring. Bandpass is unity gain at the center. |
@@ -162,7 +195,7 @@ Each style uses one toolset. Use it for every sound in the game so they all feel
 |---|---|---|
 | **Retro / chiptune** | `square` (duty 0.125/0.25/0.5), `triangle`, `noise`; no reverb | Hard pitch steps, arpeggios, short decays |
 | **Cartoon / casual** | `sine` + `fm` (bells, bling), `partials` (wood, xylophone, marimba), `vibrato` (boing, wobble), driven sine thumps; small `reverb` (mix 0.08-0.18) | Round, soft and bouncy. Pitch overshoot and settle. No harsh noise and no square buzz. |
-| **Grounded / realistic** | Filtered `noise` textures, resonant band-passes, low thumps, modal `partials` for objects | Sounds like a material. Many jittered micro-hits. Ceiling: for truly realistic sounds, suggest recorded CC0 samples (Freesound) layered with these. |
+| **Grounded / realistic** | **Recorded CC0 samples** in the foley pattern (impact + texture + room). Synth layers only as sweeteners (a sub thump, a filtered-noise tail) or for UI | Sounds like a material, not a synth. All-synth grounded foley was rejected by ear as toy-like, so don't ship it. |
 
 ## Category recipes
 
@@ -174,10 +207,11 @@ Starting points. Values are typical ranges; ✓ marks a tested recipe in `recipe
 | Coin, cartoon ✓ | FM bell (ratio 3, index 2.5→0.3) on B5→F#6, octave shimmer partials, a noise glint on the 2nd note, reverb 0.18 |
 | Jump, retro ✓ | Square, 8 cents detune, 180→520 Hz over 180 ms, low-pass opening 2.5→6 kHz |
 | Jump, cartoon ✓ | "Boing": sine with rich partials rising 220→540 Hz then settling to 480 Hz, a 16 Hz spring vibrato that decays, a soft band-passed air whoosh |
-| Hit, grounded ✓ (`hit`) | Noise snap (HP 2 kHz, 15 ms) + driven sine 160→55 Hz (150 ms) + band-pass noise 1200→400 Hz crunch |
+| Hit, synth placeholder (`hit`) | Noise snap (HP 2 kHz, 15 ms) + driven sine 160→55 Hz (150 ms) + band-pass noise 1200→400 Hz crunch. For a grounded game, replace it with recorded impacts. |
+| Hoof / footstep, grounded ✓ (`hoof_dirt_foley`) | **The foley pattern**: shared CC0 hoof impact (HP 150, LP 3.5 kHz, -3 dB) + dirt texture cut, reverb 0.05, -19 LUFS, 4 paired variants. Approved by ear. |
 | Hit, cartoon ✓ | "Bonk": driven sine 300→70 Hz + woodblock partials at 520 Hz + soft cloth slap, reverb 0.1 |
 | UI click ✓ | Noise tick (HP 3 kHz, 6 ms) + triangle 2000→1700 Hz (25 ms), master HP 300 Hz, -20 LUFS |
-| Horse gallop, grounded ✓ (`horse_gallop`) | Loop of 4 strides at 0.42 s, footfalls at 0/0.07/0.16/0.22 s within each stride. Each hoof = click + band-pass noise "clop" (850 Hz, q 5) + sine thump 140→70 Hz + dirt noise. Accent the 4th footfall. Jitter ±8 ms, ±3 dB, ±0.8 st. |
+| Horse gallop, synth placeholder (`horse_gallop`) | Rejected by ear as toy-like; use only as a stand-in. Loop of 4 strides at 0.42 s, footfalls at 0/0.07/0.16/0.22 s within each stride. Each hoof = click + band-pass noise "clop" (850 Hz, q 5) + sine thump 140→70 Hz + dirt noise. Accent the 4th footfall. Jitter ±8 ms, ±3 dB, ±0.8 st. |
 | Horse gallop, cartoon ✓ | Coconut-shell "clip-clop": woodblock partials alternating 900/640 Hz on the same footfalls + hollow band-pass at 450 Hz (q 6) + a soft accent thump, reverb 0.12 |
 | UI hover | Sine or triangle at 2-3 kHz, 20-40 ms, 6 dB below the click |
 | UI confirm | Two rising notes (major 3rd or 5th), 60 + 120 ms, triangle or square |
@@ -207,7 +241,7 @@ Starting points. Values are typical ranges; ✓ marks a tested recipe in `recipe
 
 - Keep the defaults: WAV, 16-bit, 44.1 kHz, mono. Every engine imports it, and mono is right for anything positional. Stereo is only for UI and music stingers.
 - **Godot**: import the WAV. For loops, set loop mode in the Import dock.
-- **Unity**: use the WAV; Unity compresses it on import. Check "Loop" on the AudioSource.
+- **Unity**: use the WAV; Unity compresses it on import. Check "Loop" on the AudioSource. To load clips by name from code (`Resources.Load<AudioClip>("Audio/Hooves/hoof_Dirt_01")`), they must live under `Assets/Resources/`. Otherwise, assign them to serialized `AudioClip` fields. If you keep a synth fallback, make a project check fail when it is used, so a missing file can't silently ship the placeholder.
 - **Unreal**: import the WAV directly.
 - **Web / Phaser / Howler**: convert with `ffmpeg -i x.wav -c:a libvorbis -q:a 5 x.ogg` and add an `.m4a` fallback for Safari. Never use MP3 for loops (the encoder adds a gap).
 - Trigger variants round-robin. Optionally add ±1 semitone of random pitch at runtime on top.

@@ -1,0 +1,13 @@
+{
+  "name": "hoof_dirt_foley",
+  "description": "Grounded foley pattern (approved by ear in a Unity prototype): one shared hoof impact + a recorded surface texture + a small room. Swap the texture files for other surfaces and muffle the impact on soft ground (low-pass 1.8 kHz for grass/mud). Each --variants N pairs impact i with texture i.",
+  "layers": [
+    {"wave": "sample", "file": ["samples/hoof_impact_01.wav", "samples/hoof_impact_02.wav", "samples/hoof_impact_03.wav", "samples/hoof_impact_04.wav"],
+     "gain_db": -3, "filters": [{"type": "highpass", "cutoff": 150}, {"type": "lowpass", "cutoff": 3500}]},
+    {"wave": "sample", "file": ["samples/dirt_texture_01.wav", "samples/dirt_texture_02.wav", "samples/dirt_texture_03.wav", "samples/dirt_texture_04.wav"],
+     "filters": [{"type": "lowpass", "cutoff": 7000}]}
+  ],
+  "master": {"lufs": -19, "peak_db": -1, "highpass": 70, "reverb": {"mix": 0.05, "decay": 0.3}},
+  "vary": {"pitch": 0.5, "gain_db": 1},
+  "expect": {"duration": [0.06, 0.5], "lufs": [-24, -18]}
+}

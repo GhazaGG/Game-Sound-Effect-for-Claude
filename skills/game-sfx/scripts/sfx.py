@@ -21,6 +21,73 @@ SR = 44100
 WAVES = ("sine", "triangle", "square", "saw", "noise")
 FILTERS = ("lowpass", "highpass", "bandpass")
 
+# Every key the engine reads. Anything else is a typo that would otherwise be silently ignored.
+SCHEMA = {
+    "patch": {"name", "description", "duration", "layers", "master", "vary", "expect"},
+    "layer": {"wave", "freq", "duty", "detune_cents", "env", "filters", "drive", "gain_db", "at", "jitter",
+              "fm", "partials", "vibrato", "file", "start", "length"},
+    "env": {"attack", "hold", "release", "curve"},
+    "filter": {"type", "cutoff", "q"},
+    "master": {"lufs", "peak_db", "highpass", "reverb", "limit_db"},
+    "reverb": {"mix", "decay"},
+    "jitter": {"time", "pitch", "gain_db"},
+    "vary": {"pitch", "gain_db"},
+    "fm": {"ratio", "index"},
+    "vibrato": {"rate", "depth"},
+    "expect": {"duration", "centroid", "lufs", "lead_ms", "tail_ms", "peak_db", "crest_db", "low", "harsh", "air"},
+}
+
+
+ALIASES = {"decay": "release", "sustain": "hold", "filter": "filters", "frequency": "freq", "pitch": "freq",
+           "gain": "gain_db", "volume": "gain_db", "waveform": "wave", "type": "wave", "detune": "detune_cents",
+           "files": "file", "loudness": "lufs", "peak": "peak_db", "hp": "highpass", "q_factor": "q", "freq": "cutoff"}
+
+
+def validate(patch):
+    """Raise ValueError listing every unknown key or bad value, with a 'did you mean' hint."""
+    import difflib
+    errors = []
+
+    def check(obj, kind, where):
+        if not isinstance(obj, dict):
+            errors.append(f"{where}: expected an object, got {type(obj).__name__}")
+            return
+        for key in obj:
+            if key not in SCHEMA[kind]:
+                hint = ALIASES.get(key) if ALIASES.get(key) in SCHEMA[kind] else None
+                hint = hint or next(iter(difflib.get_close_matches(key, SCHEMA[kind], 1)), None)
+                errors.append(f"{where}: unknown key {key!r}" + (f", did you mean {hint!r}?" if hint else
+                                                                f" (allowed: {', '.join(sorted(SCHEMA[kind]))})"))
+
+    check(patch, "patch", "patch")
+    if not patch.get("layers"):
+        errors.append("patch: 'layers' must be a non-empty list")
+    for name in ("master", "vary", "expect"):
+        if name in patch:
+            check(patch[name], name, name)
+    if "reverb" in patch.get("master", {}):
+        check(patch["master"]["reverb"], "reverb", "master.reverb")
+    for i, layer in enumerate(patch.get("layers") or []):
+        where = f"layers[{i}]"
+        check(layer, "layer", where)
+        if not isinstance(layer, dict):
+            continue
+        for name in ("env", "jitter", "fm", "vibrato"):
+            if name in layer:
+                check(layer[name], name, f"{where}.{name}")
+        for j, flt in enumerate(layer.get("filters", [])):
+            check(flt, "filter", f"{where}.filters[{j}]")
+            if isinstance(flt, dict) and flt.get("type") not in FILTERS:
+                errors.append(f"{where}.filters[{j}]: type must be one of {FILTERS}")
+            if isinstance(flt, dict) and flt.get("q", 1) <= 0:
+                errors.append(f"{where}.filters[{j}]: q must be > 0")
+        if layer.get("wave", "sine") not in WAVES + ("sample",):
+            errors.append(f"{where}: wave must be one of {WAVES + ('sample',)}")
+        if layer.get("wave") == "sample" and not layer.get("file"):
+            errors.append(f"{where}: a sample layer needs 'file' (a path, or a list of paths for variants)")
+    if errors:
+        raise ValueError("invalid patch:\n  " + "\n  ".join(errors))
+
 
 def sample_curve(spec, n, scale=1.0):
     """A number, or [[t, value], ...] breakpoints (t in seconds). Equal t = instant step.
@@ -131,20 +198,10 @@ _audio = {}
 
 
 def load_audio(path):
-    """Any audio file -> mono float list at SR. WAV at SR is read natively; anything else needs ffmpeg."""
+    """Any audio file -> mono float list at SR. PCM WAV at SR is read natively; anything else needs ffmpeg."""
     if path not in _audio:
-        if path.lower().endswith(".wav"):
-            x, sr, _ = doctor.read_wav(path)
-            if sr == SR:
-                _audio[path] = x
-                return x
-        import subprocess
-        try:
-            raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-ac", "1", "-ar", str(SR), "-f", "s16le", "-"],
-                                 capture_output=True, check=True).stdout
-        except FileNotFoundError:
-            sys.exit("ffmpeg is needed to read this file (https://ffmpeg.org); or convert it to 44.1 kHz WAV first")
-        _audio[path] = [v / 32768 for v in struct.unpack(f"<{len(raw) // 2}h", raw)]
+        x, sr, _ = doctor.read_wav(path)
+        _audio[path] = x if sr == SR else doctor.ffmpeg_decode(path, SR)[0]
     return _audio[path]
 
 
@@ -171,7 +228,11 @@ def render_layer(layer, rng, pitch, gain_db):
         src = src[int(layer.get("start", 0) * SR):]
         if "length" in layer:
             src = src[: int(layer["length"] * SR)]
-        x = [src[int(i * pitch)] for i in range(int((len(src) - 1) / pitch))]
+        x = []
+        for i in range(int((len(src) - 1) / pitch)):  # linear interpolation: nearest-neighbour adds audible grit
+            p = i * pitch
+            k = int(p)
+            x.append(src[k] + (src[k + 1] - src[k]) * (p - k))
         dur = len(x) / SR
         env = {"attack": 0.001, "hold": max(0.0, dur - 0.011), "release": 0.01, "curve": 1, **layer.get("env", {})}
     else:
@@ -232,7 +293,8 @@ def synth(layer, kind, n, pitch, rng):
     return x
 
 
-def render(patch, seed=0, variant=False):
+def render(patch, seed=0, variant=False, index=0):
+    """`index` picks the variant's file when a sample layer lists several (round-robin)."""
     rng = random.Random(seed)
     vary = patch.get("vary", {}) if variant else {}
     master = patch.get("master", {})
@@ -240,6 +302,8 @@ def render(patch, seed=0, variant=False):
 
     events = []
     for layer in patch["layers"]:
+        if isinstance(layer.get("file"), list):
+            layer = {**layer, "file": layer["file"][index % len(layer["file"])]}
         j = layer.get("jitter", {})
         for t in layer.get("at", [0]):
             # Same draw for every layer firing at the same time, so stacked layers move together.
@@ -313,6 +377,19 @@ def write_wav(path, x):
         w.writeframes(b"".join(struct.pack("<h", int(round(max(-1.0, min(1.0, v)) * 32767))) for v in x))
 
 
+def load_patch(path):
+    """Read and validate a patch; sample files become absolute path lists (relative to the patch)."""
+    with open(path, encoding="utf-8") as f:
+        patch = json.load(f)
+    validate(patch)
+    here = os.path.dirname(os.path.abspath(path))
+    for layer in patch["layers"]:
+        if "file" in layer:
+            files = layer["file"] if isinstance(layer["file"], list) else [layer["file"]]
+            layer["file"] = [os.path.join(here, f) for f in files]
+    return patch
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("patch")
@@ -322,18 +399,17 @@ def main():
     ap.add_argument("--png", action="store_true", help="also write a spectrogram PNG per file")
     args = ap.parse_args()
 
-    with open(args.patch, encoding="utf-8") as f:
-        patch = json.load(f)
-    for layer in patch["layers"]:  # sample files are relative to the patch
-        if "file" in layer:
-            layer["file"] = os.path.join(os.path.dirname(os.path.abspath(args.patch)), layer["file"])
+    try:
+        patch = load_patch(args.patch)
+    except ValueError as e:
+        sys.exit(f"{args.patch}: {e}")
     name = patch.get("name") or os.path.splitext(os.path.basename(args.patch))[0]
     os.makedirs(args.out, exist_ok=True)
 
-    jobs = [(f"{name}_{i + 1:02d}", args.seed + i, True) for i in range(args.variants)] or [(name, args.seed, False)]
+    jobs = [(f"{name}_{i + 1:02d}", args.seed + i, True, i) for i in range(args.variants)] or [(name, args.seed, False, 0)]
     failed = False
-    for stem, seed, variant in jobs:
-        x = render(patch, seed, variant)
+    for stem, seed, variant, index in jobs:
+        x = render(patch, seed, variant, index)
         path = os.path.join(args.out, stem + ".wav")
         write_wav(path, x)
         expect = dict(patch.get("expect") or {})

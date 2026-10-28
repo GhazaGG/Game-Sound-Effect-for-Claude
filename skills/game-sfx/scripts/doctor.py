@@ -17,10 +17,31 @@ import wave
 import zlib
 
 
+def ffmpeg_decode(path, sr=None):
+    """Decode anything ffmpeg reads (float WAV, OGG, MP3, FLAC, M4A...) -> (mono samples, sr, channels)."""
+    import subprocess
+    try:
+        probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                                "stream=sample_rate,channels", "-of", "csv=p=0", path],
+                               capture_output=True, text=True, check=True).stdout.split(",")
+        src_sr, ch = int(probe[0]), int(probe[1])
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-ac", "1", "-ar", str(sr or src_sr), "-f", "s16le", "-"],
+                             capture_output=True, check=True).stdout
+    except FileNotFoundError:
+        sys.exit(f"{path}: needs ffmpeg to read (https://ffmpeg.org), or convert it to 16-bit PCM WAV first")
+    except (subprocess.CalledProcessError, ValueError, IndexError):
+        sys.exit(f"{path}: not a readable audio file")
+    return [v / 32768 for v in struct.unpack(f"<{len(raw) // 2}h", raw)], sr or src_sr, ch
+
+
 def read_wav(path):
-    with wave.open(path, "rb") as w:
-        ch, width, sr, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
-        raw = w.readframes(n)
+    """Any audio file -> (mono samples, sample rate, channels). PCM WAV is read natively, the rest via ffmpeg."""
+    try:
+        with wave.open(path, "rb") as w:
+            ch, width, sr, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
+            raw = w.readframes(n)
+    except (wave.Error, EOFError):  # float WAV (Audacity's default export), OGG, MP3...
+        return ffmpeg_decode(path)
     if width == 1:
         vals = [(b - 128) / 128 for b in raw]
     elif width == 2:

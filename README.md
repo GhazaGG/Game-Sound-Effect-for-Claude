@@ -6,7 +6,10 @@ Ask Claude for a coin sound and you usually get a raw beep that clicks, hisses a
 
 - **Recipes.** Layered patches (transient + body + tail) built from sound-design practice and sfxr's own presets.
 - **Synth.** A click-proof synth with band-limited oscillators, envelopes that always end at zero, DC removal, LUFS-matched loudness and tail trimming.
-- **Doctor.** Measures peak, LUFS, crest, brightness and harsh/aliasing energy, then draws a **spectrogram PNG**. Claude reads that picture to check its own work.
+- **Sample pipeline.** For real-world foley, it finds CC0 recordings on Freesound, cuts out the cleanest single hits, and layers them as *shared impact + surface texture + small room*.
+- **Doctor.** Measures peak, LUFS, crest, brightness and harsh/aliasing energy, then draws a **spectrogram PNG**. Claude reads that picture to check its own work. It reads WAV (including float), OGG and MP3.
+- **Preview.** Lays sounds out the way the game plays them (gallop, walk, sequence), old vs new, so **your ears** make the final call.
+- **Typo-proof patches.** An unknown key fails with "did you mean 'filters'?" instead of silently producing a wrong sound.
 
 The synth is **pure Python stdlib**: no pip install, no API key, works offline. For realistic foley (hooves, footsteps, water) the **sample pipeline** finds CC0 recordings on Freesound, cuts out the cleanest hits and makes them game-ready (needs a free Freesound key + ffmpeg). Output is game-ready WAV for Godot, Unity, Unreal, Phaser and anything else.
 
@@ -59,9 +62,10 @@ Listen to them in [`examples/`](examples/).
 | `horse_gallop_cartoon` | cartoon | Coconut-shell clip-clop, seamless loop |
 | `coin_retro` | retro | Two-note square pickup |
 | `jump_retro` | retro | Detuned square sweeping up |
-| `hit` | grounded | Noise snap + saturated thump + crunch |
-| `horse_gallop` | grounded | Dirt gallop loop, humanized per hoof |
+| `hoof_dirt_foley` | grounded | **Recorded** CC0 hoof impact + dirt texture, 4 paired variants (approved by ear in a Unity prototype) |
 | `ui_click` | any | Tiny tick + blip |
+| `hit` | synth placeholder | Noise snap + saturated thump + crunch. Replace with recordings for a grounded game |
+| `horse_gallop` | synth placeholder | Procedural gallop loop. It sounds toy-like next to real hooves; use only as a stand-in |
 
 Styles are first-class. Tell Claude your game's look and every sound comes from the same palette (see [SKILL.md](skills/game-sfx/SKILL.md#style)).
 
@@ -80,7 +84,11 @@ Every sound keeps its editable source in `sfx/patches/<name>.json`. To change on
 ## How it works
 
 ```
-request → recipe → sfx.py (render) → doctor.py (metrics + spectrogram) → Claude looks → tweak → variants → your assets/
+request → synth or samples?
+   synth:   recipe → sfx.py
+   samples: freesound.py → slice.py → sfx.py (impact + texture layers)
+→ doctor.py (metrics + spectrogram) → Claude looks → tweak → variants
+→ preview.py (A/B in the game's rhythm) → you listen → your assets/
 ```
 
 ## Roadmap
