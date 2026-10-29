@@ -1,8 +1,34 @@
-# 🔊 game-sfx: game sound effects Claude can actually design
+<div align="center">
+
+# 🔊 game-sfx
+
+**Game sound effects your AI agent can actually design.**
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-3776AB.svg?logo=python&logoColor=white)](#install)
+[![Zero dependencies](https://img.shields.io/badge/synth-zero%20dependencies-brightgreen.svg)](#privacy--network)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757.svg)](#install)
+[![Engines](https://img.shields.io/badge/engines-Unity%20%C2%B7%20Godot%20%C2%B7%20Unreal%20%C2%B7%20Phaser-555.svg)](#it-learns-your-game)
+
+</div>
 
 Ask Claude for a coin sound and you usually get a raw beep that clicks, hisses and lasts too long. Claude can't hear, so it can't tell.
 
-**game-sfx** is a Claude Code skill that works around that:
+## Before → after
+
+Same request, "a coin pickup sound". The doctor report and spectrogram are what Claude sees:
+
+| What an agent usually writes | With game-sfx (`coin_cartoon`) |
+|---|---|
+| ![naive beep spectrogram](docs/img/naive_beep.png) | ![coin spectrogram](docs/img/coin_cartoon.png) |
+| `FAIL clipped` · `WARN clicks at start/end` · `WARN flat, no transient` · 0 dBFS, 0.6 s of buzz | `OK` · -16 LUFS · a two-note FM bell that rings out and decays to silence |
+| 🎧 [naive_beep.wav](examples/naive_beep.wav) | 🎧 [coin_cartoon.wav](examples/coin_cartoon.wav) |
+
+*Top strip: amplitude. Below: log-frequency spectrogram (50 Hz to 22 kHz). Dotted lines mark 100 Hz, 1 kHz and 10 kHz.*
+
+## What's inside
+
+**game-sfx** is a Claude Code skill that works around the fact that Claude can't hear:
 
 - **Recipes.** Layered patches (transient + body + tail) built from sound-design practice and sfxr's own presets.
 - **Synth.** A click-proof synth with band-limited oscillators, envelopes that always end at zero, DC removal, LUFS-matched loudness and tail trimming.
@@ -100,15 +126,22 @@ request → synth or samples?
 
 ## Roadmap
 
-- [ ] More tested recipes (explosion, laser, footsteps per surface, magic)
+- [x] Click-proof synth, doctor and spectrograms
+- [x] CC0 sample pipeline (Freesound search, hit slicer, hybrid foley layers)
+- [x] Game-rhythm A/B previews
+- [ ] More recipes approved by ear (explosion, laser, magic, footsteps per surface)
 - [ ] OGG export and engine import snippets
 - [ ] Optional AI backends for realistic sounds (ElevenLabs, Stable Audio Open)
 - [ ] Web demo page: prompt → sound, side by side with a naive beep
 
-## Test
+## Contributing
 
-```bash
-python tests/test_recipes.py
-```
+Recipes improve when people listen to them.
+
+- **Tried a recipe in your game?** Open an [issue](https://github.com/GhazaGG/Game-Sound-Effect-for-Claude/issues) saying what sounded off ("coin too shrill", "hit has no weight"), plus your engine and style.
+- **Made a sound you're proud of?** Share the patch JSON in [Discussions](https://github.com/GhazaGG/Game-Sound-Effect-for-Claude/discussions). The best ones become recipes.
+- **Code changes:** run `python tests/test_recipes.py` before a PR.
+
+If game-sfx saved your game from raw beeps, a ⭐ helps other devs find it.
 
 MIT licensed. Sounds you make with it are yours.
