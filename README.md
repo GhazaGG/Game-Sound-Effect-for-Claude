@@ -8,6 +8,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-3776AB.svg?logo=python&logoColor=white)](#install)
 [![Zero dependencies](https://img.shields.io/badge/synth-zero%20dependencies-brightgreen.svg)](#privacy--network)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757.svg)](#install)
+[![Live demo](https://img.shields.io/badge/%F0%9F%8E%A7-listen%20to%20the%20demo-ff8a4c.svg)](https://ghazagg.github.io/Game-Sound-Effect-for-Claude/)
 [![Engines](https://img.shields.io/badge/engines-Unity%20%C2%B7%20Godot%20%C2%B7%20Unreal%20%C2%B7%20Phaser-555.svg)](#it-learns-your-game)
 
 </div>
@@ -15,6 +16,8 @@
 Ask Claude for a coin sound and you usually get a raw beep that clicks, hisses and lasts too long. Claude can't hear, so it can't tell.
 
 ## Before → after
+
+**[▶ Listen to every recipe in your browser](https://ghazagg.github.io/Game-Sound-Effect-for-Claude/)**
 
 Same request, "a coin pickup sound". The doctor report and spectrogram are what Claude sees:
 

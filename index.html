@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>game-sfx · game sound effects your AI agent can design</title>
+<meta name="description" content="A Claude Code skill for game SFX: click-proof synth, CC0 foley pipeline, and a doctor that lets an AI hear through metrics and spectrograms. Play every recipe in your browser.">
+<meta name="theme-color" content="#0c0e12">
+<meta property="og:type" content="website">
+<meta property="og:title" content="game-sfx · listen to the recipes">
+<meta property="og:description" content="Claude can't hear, so it writes beeps. game-sfx gives it ears. Play every sound in your browser.">
+<meta property="og:image" content="https://raw.githubusercontent.com/GhazaGG/Game-Sound-Effect-for-Claude/main/docs/img/coin_cartoon.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ff8a4c'/%3E%3Cpath d='M6 16h3M11 11v10M16 7v18M21 11v10M26 14v4' stroke='%230c0e12' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0c0e12;--bg2:#12151b;--card:#161a22;--line:#242a35;--line2:#2f3744;
+  --fg:#eceef3;--mute:#98a2b3;--dim:#6b7585;
+  --acc:#ff8a4c;--acc2:#ffb27d;--bad:#ff6b6b;--ok:#5ad19a;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(900px 400px at 50% -80px,rgba(255,138,76,.13),transparent 70%)}
+a{color:var(--acc2);text-underline-offset:3px}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+
+nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0}
+.logo{font-family:var(--mono);font-weight:700;letter-spacing:-.02em;color:var(--fg);text-decoration:none;display:flex;align-items:center;gap:10px}
+.logo i{width:26px;height:26px;border-radius:7px;background:var(--acc);display:grid;place-items:center}
+.logo svg{width:16px;height:16px}
+nav a.gh{font-size:.9rem;color:var(--mute);text-decoration:none;border:1px solid var(--line);padding:6px 14px;border-radius:999px;transition:.15s}
+nav a.gh:hover{color:var(--fg);border-color:var(--line2)}
+
+.hero{padding:72px 0 56px;text-align:center}
+.eyebrow{font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--acc)}
+h1{font-size:clamp(2.2rem,6vw,3.8rem);line-height:1.08;letter-spacing:-.035em;margin:14px auto 18px;max-width:14em}
+h1 em{font-style:normal;color:var(--acc)}
+.lede{color:var(--mute);font-size:1.15rem;max-width:36em;margin:0 auto 32px}
+.install{display:flex;align-items:center;gap:10px;max-width:520px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 6px 6px 16px;text-align:left}
+.install code{font-family:var(--mono);font-size:.88rem;flex:1;overflow-x:auto;white-space:nowrap;color:var(--fg);scrollbar-width:none}
+.install code span{color:var(--dim)}
+button{font:inherit;cursor:pointer}
+.copy{background:var(--acc);color:#16100b;border:0;border-radius:8px;padding:8px 16px;font-weight:600;font-size:.88rem;transition:.15s}
+.copy:hover{background:var(--acc2)}
+.hint{color:var(--dim);font-size:.85rem;margin-top:14px}
+
+h2{font-size:1.7rem;letter-spacing:-.025em;margin:0 0 6px}
+section{padding:48px 0}
+.sec-sub{color:var(--mute);margin:0 0 26px}
+
+.ab{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.ab{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.panel.good{border-color:rgba(90,209,154,.35);box-shadow:0 0 0 1px rgba(90,209,154,.08),0 20px 60px -30px rgba(90,209,154,.35)}
+.badge{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;font-weight:700}
+.bad-t{color:var(--bad)}.ok-t{color:var(--ok)}
+.panel img{width:100%;display:block;border-radius:8px;background:#000;aspect-ratio:auto}
+.panel p{margin:0;color:var(--mute);font-size:.92rem}
+
+/* player */
+.pl{display:flex;align-items:center;gap:12px}
+.play{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--acc);color:#16100b;display:grid;place-items:center;transition:transform .12s,background .15s}
+.play:hover{background:var(--acc2);transform:scale(1.06)}
+.play svg{width:18px;height:18px;fill:currentColor}
+.play .i-pause{display:none}.playing .play .i-play{display:none}.playing .play .i-pause{display:block}
+.wave{position:relative;flex:1;height:44px;cursor:pointer;min-width:0}
+.wave canvas{width:100%;height:100%;display:block}
+.time{font-family:var(--mono);font-size:.74rem;color:var(--dim);flex:none;min-width:2.9em;text-align:right}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+.chip{background:none;border:1px solid var(--line);color:var(--mute);border-radius:999px;padding:6px 14px;font-size:.86rem;transition:.15s}
+.chip:hover{color:var(--fg);border-color:var(--line2)}
+.chip[aria-pressed=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;transition:border-color .15s}
+.card:hover,.card.playing{border-color:var(--line2)}
+.card.playing{border-color:var(--acc)}
+.card header{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.card h3{margin:0;font-family:var(--mono);font-size:.95rem;font-weight:600}
+.tag{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);white-space:nowrap}
+.tag.loop{color:var(--acc)}
+.card p{margin:0;color:var(--mute);font-size:.9rem;line-height:1.5}
+
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.feat div{padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--bg2)}
+.feat b{display:block;margin-bottom:4px}
+.feat span{color:var(--mute);font-size:.92rem}
+
+pre{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;font:.88rem/1.7 var(--mono);margin:0 0 16px}
+pre span{color:var(--dim)}
+
+footer{border-top:1px solid var(--line);margin-top:32px;padding:28px 0 56px;color:var(--dim);font-size:.9rem;display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between}
+footer a{color:var(--mute)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="logo" href="#top"><i><svg viewBox="0 0 24 24" fill="none" stroke="#0c0e12" stroke-width="2.6" stroke-linecap="round"><path d="M3 12h2M8 8v8M13 4v16M18 8v8M22 11v2"/></svg></i>game-sfx</a>
+    <a class="gh" href="https://github.com/GhazaGG/Game-Sound-Effect-for-Claude">GitHub ↗</a>
+  </nav>
+
+  <header class="hero" id="top">
+    <div class="eyebrow">Claude Code skill · Unity · Godot · Unreal · Phaser</div>
+    <h1>Game sound effects your AI agent can <em>actually design</em></h1>
+    <p class="lede">Ask an AI for a coin sound and you get a raw beep that clicks, hisses and lasts too long. It can't hear, so it can't tell. game-sfx gives it ears: loudness metrics and spectrograms it can read.</p>
+    <div class="install">
+      <code><span>/plugin marketplace add</span> GhazaGG/Game-Sound-Effect-for-Claude</code>
+      <button class="copy" id="copy">Copy</button>
+    </div>
+    <p class="hint">Then run <code style="font-family:var(--mono)">/plugin install game-sfx@game-sfx</code>. Pure Python stdlib, no API key, works offline.</p>
+  </header>
+
+  <section id="compare">
+    <h2>Same request, two results</h2>
+    <p class="sec-sub">"A coin pickup sound." Press play on both, with headphones if you can.</p>
+    <div class="ab">
+      <div class="panel" data-src="examples/naive_beep.wav">
+        <span class="badge bad-t">WHAT AN AGENT USUALLY WRITES</span>
+        <img src="docs/img/naive_beep.png" alt="Spectrogram of a naive beep: a flat bar of energy" loading="lazy">
+        <div class="pl"><button class="play" aria-label="Play naive beep"></button><div class="wave"><canvas></canvas></div><span class="time">0.0s</span></div>
+        <p>Clipped at 0 dBFS, clicks at start and end, flat, no transient. Half a second of buzz.</p>
+      </div>
+      <div class="panel good" data-src="examples/coin_cartoon.wav">
+        <span class="badge ok-t">WITH GAME-SFX</span>
+        <img src="docs/img/coin_cartoon.png" alt="Spectrogram of coin_cartoon: a two-note bell that decays" loading="lazy">
+        <div class="pl"><button class="play" aria-label="Play coin_cartoon"></button><div class="wave"><canvas></canvas></div><span class="time">0.0s</span></div>
+        <p>A two-note FM bell that rings out and decays to silence. -16 LUFS, no clicks, no harsh highs.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="recipes">
+    <h2>Recipes</h2>
+    <p class="sec-sub">Every sound is a small JSON patch you can edit. Click a waveform to seek.</p>
+    <div class="chips" id="chips" role="group" aria-label="Filter by style"></div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <p class="sec-sub">Claude renders, looks at the doctor report, fixes, and repeats until it passes.</p>
+    <div class="feat">
+      <div><b>Click-proof synth</b><span>Band-limited oscillators, envelopes that always end at zero, DC removal and LUFS-matched loudness.</span></div>
+      <div><b>Doctor</b><span>Peak, LUFS, crest, brightness and aliasing checks, plus a spectrogram PNG Claude reads to check its own work.</span></div>
+      <div><b>CC0 foley pipeline</b><span>Finds free recordings on Freesound, cuts the cleanest hits, layers impact, texture and a small room.</span></div>
+      <div><b>It learns your game</b><span>Detects your engine, reads your project and writes a sound bible so every sound feels like one game.</span></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p class="sec-sub">In Claude Code:</p>
+<pre><span>/plugin marketplace add</span> GhazaGG/Game-Sound-Effect-for-Claude
+<span>/plugin install</span> game-sfx@game-sfx</pre>
+    <p class="sec-sub">Then just ask: <em>"make a coin pickup sound for my platformer, with 4 variants."</em> Output is game-ready WAV. <a href="https://github.com/GhazaGG/Game-Sound-Effect-for-Claude#readme">Read the full docs</a> or leave a ⭐ if it saved you from raw beeps.</p>
+  </section>
+
+  <footer>
+    <span>MIT licensed. Sounds you make with it are yours.</span>
+    <span><a href="https://github.com/GhazaGG/Game-Sound-Effect-for-Claude">Source</a> · <a href="https://github.com/GhazaGG/Game-Sound-Effect-for-Claude/discussions">Share a patch</a> · <a href="https://github.com/GhazaGG/Game-Sound-Effect-for-Claude/issues">Report a sound</a></span>
+  </footer>
+</div>
+
+<script>
+const ICON='<svg viewBox="0 0 24 24"><path class="i-play" d="M7 4.5v15l13-7.5z"/><g class="i-pause"><rect x="6" y="4.5" width="4.5" height="15" rx="1"/><rect x="13.5" y="4.5" width="4.5" height="15" rx="1"/></g></svg>';
+const R=[
+["coin_cartoon","cartoon","FM-bell bling with shimmer and a small room"],
+["jump_cartoon","cartoon","Springy boing with a decaying wobble"],
+["hit_cartoon","cartoon","Rounded bonk: thump plus woodblock knock"],
+["horse_gallop_cartoon","cartoon","Coconut-shell clip-clop, seamless loop","loop"],
+["coin_retro","retro","Two-note square pickup"],
+["jump_retro","retro","Detuned square sweeping up"],
+["hoof_dirt_foley","grounded","Recorded CC0 hoof impact + dirt texture, approved by ear"],
+["ui_click","any","Tiny tick + blip"],
+["hit","placeholder","Noise snap + saturated thump + crunch"],
+["horse_gallop","placeholder","Procedural gallop loop, toy-like stand-in","loop"]];
+const $=s=>document.querySelector(s);
+
+// build recipe cards + filter chips
+const styles=["all",...new Set(R.map(r=>r[1]))];
+$("#chips").innerHTML=styles.map((s,i)=>`<button class="chip" data-s="${s}" aria-pressed="${i==0}">${s}</button>`).join("");
+$("#grid").innerHTML=R.map(([n,s,d,l])=>`
+<article class="card" data-style="${s}" data-src="examples/${n}.wav">
+  <header><h3>${n}</h3><span class="tag ${l?'loop':''}">${l?'loop · ':''}${s}</span></header>
+  <div class="pl"><button class="play" aria-label="Play ${n}"></button><div class="wave"><canvas></canvas></div><span class="time">0.0s</span></div>
+  <p>${d}</p>
+</article>`).join("");
+$("#chips").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;
+  document.querySelectorAll(".chip").forEach(c=>c.setAttribute("aria-pressed",c===b));
+  document.querySelectorAll(".card").forEach(c=>c.hidden=b.dataset.s!=="all"&&c.dataset.style!==b.dataset.s)};
+document.querySelectorAll(".play").forEach(b=>b.innerHTML=ICON);
+
+// players: one sound at a time, waveform drawn from the decoded file
+const ctx=new (window.AudioContext||window.webkitAudioContext)();
+const players=[];
+function draw(p){
+  const c=p.canvas,d=devicePixelRatio||1,w=c.clientWidth*d,h=c.clientHeight*d;
+  if(!w)return;c.width=w;c.height=h;const g=c.getContext("2d");g.clearRect(0,0,w,h);
+  const n=Math.floor(w/(3*d)),peaks=p.peaks||Array(n).fill(.04),prog=p.audio.duration?p.audio.currentTime/p.audio.duration:0;
+  for(let i=0;i<n;i++){
+    const v=peaks[Math.floor(i/n*peaks.length)]||.04,bh=Math.max(2*d,v*h),x=i*3*d;
+    g.fillStyle=i/n<prog?"#ff8a4c":"#3a4352";
+    g.fillRect(x,(h-bh)/2,2*d,bh);
+  }
+}
+document.querySelectorAll("[data-src]").forEach(el=>{
+  const p={el,audio:new Audio(el.dataset.src),canvas:el.querySelector("canvas"),time:el.querySelector(".time")};
+  p.audio.preload="none";players.push(p);
+  fetch(el.dataset.src).then(r=>r.arrayBuffer()).then(b=>ctx.decodeAudioData(b)).then(buf=>{
+    const ch=buf.getChannelData(0),n=200,step=Math.floor(ch.length/n),pk=[];let max=0;
+    for(let i=0;i<n;i++){let m=0;for(let j=i*step;j<(i+1)*step;j++)m=Math.max(m,Math.abs(ch[j]));pk.push(m);max=Math.max(max,m)}
+    p.peaks=pk.map(v=>v/(max||1));p.time.textContent=buf.duration.toFixed(1)+"s";draw(p);
+  }).catch(()=>draw(p));
+  const stop=()=>el.classList.remove("playing");
+  p.audio.onended=()=>{stop();p.audio.currentTime=0;draw(p)};
+  p.audio.onpause=stop;
+  p.audio.ontimeupdate=()=>draw(p);
+  el.querySelector(".play").onclick=()=>{
+    if(!p.audio.paused){p.audio.pause();return}
+    players.forEach(o=>o!==p&&o.audio.pause());
+    p.audio.currentTime=p.audio.ended?0:p.audio.currentTime;
+    p.audio.play();el.classList.add("playing");
+  };
+  p.canvas.parentElement.onclick=e=>{
+    if(!p.audio.duration)return;
+    const r=e.currentTarget.getBoundingClientRect();
+    p.audio.currentTime=(e.clientX-r.left)/r.width*p.audio.duration;draw(p);
+  };
+});
+addEventListener("resize",()=>players.forEach(draw));
+// seek-on-click while paused still needs a first draw
+players.forEach(draw);
+
+$("#copy").onclick=e=>{
+  navigator.clipboard.writeText("/plugin marketplace add GhazaGG/Game-Sound-Effect-for-Claude").then(()=>{
+    e.target.textContent="Copied";setTimeout(()=>e.target.textContent="Copy",1500)}).catch(()=>{});
+};
+</script>
+</body>
+</html>
