@@ -17,5 +17,5 @@
   ],
   "master": {"lufs": -16, "peak_db": -1, "highpass": 150},
   "vary": {"pitch": 0.5, "gain_db": 1},
-  "expect": {"duration": [0.2, 0.4], "centroid": [1500, 6000]}
+  "expect": {"pitch": "rising", "duration": [0.2, 0.4], "centroid": [1500, 6000]}
 }

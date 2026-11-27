@@ -34,7 +34,8 @@ SCHEMA = {
     "vary": {"pitch", "gain_db"},
     "fm": {"ratio", "index"},
     "vibrato": {"rate", "depth"},
-    "expect": {"duration", "centroid", "lufs", "lead_ms", "tail_ms", "peak_db", "crest_db", "low", "harsh", "air"},
+    "expect": {"duration", "centroid", "lufs", "lead_ms", "tail_ms", "peak_db", "crest_db", "low", "harsh", "air",
+               "true_peak_db", "mmax", "attack_ms", "decay_ms", "hits", "pitch"},
 }
 
 
@@ -65,6 +66,9 @@ def validate(patch):
     for name in ("master", "vary", "expect"):
         if name in patch:
             check(patch[name], name, name)
+    pitch = (patch.get("expect") or {}).get("pitch") if isinstance(patch.get("expect"), dict) else None
+    if pitch is not None and pitch not in doctor.PITCH_SHAPES:
+        errors.append(f"expect.pitch must be one of {doctor.PITCH_SHAPES}, got {pitch!r}")
     if "reverb" in patch.get("master", {}):
         check(patch["master"]["reverb"], "reverb", "master.reverb")
     for i, layer in enumerate(patch.get("layers") or []):
@@ -360,6 +364,9 @@ def finish(buf, master, fixed=False, extra_db=0.0):
         gain = min(gain * 10 ** (master.get("limit_db", 6) / 20), 10 ** ((master["lufs"] - doctor.loudness(buf, SR)) / 20))
     gain *= 10 ** (extra_db / 20)
     buf = limit([v * gain for v in buf], ceiling)
+    tp = doctor.true_peak(buf)
+    if tp > ceiling:  # the limiter sees samples; reconstruction between them can still overshoot
+        buf = [v * ceiling / tp for v in buf]
 
     if fixed:
         return buf  # seamless loop: end flows into start, a fade would make a gap
@@ -369,12 +376,24 @@ def finish(buf, master, fixed=False, extra_db=0.0):
     return buf
 
 
-def write_wav(path, x):
+def write_wav(path, x, loop=False):
+    """16-bit mono WAV. loop=True adds a smpl chunk looping the whole file, which Godot ("Detect From WAV"),
+    Unreal and Unity read as loop points, so the engine loops it without extra setup."""
     with wave.open(path, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(SR)
         w.writeframes(b"".join(struct.pack("<h", int(round(max(-1.0, min(1.0, v)) * 32767))) for v in x))
+    if loop:
+        # manufacturer, product, sample period (ns), MIDI unity note, pitch fraction, SMPTE format/offset,
+        # 1 loop, no sampler data; then the loop: id, type 0 (forward), start, end (inclusive), fraction, infinite
+        body = struct.pack("<9I", 0, 0, round(1e9 / SR), 60, 0, 0, 0, 1, 0) + struct.pack("<6I", 0, 0, 0, len(x) - 1, 0, 0)
+        with open(path, "r+b") as f:
+            f.seek(0, 2)
+            f.write(b"smpl" + struct.pack("<I", len(body)) + body)
+            size = f.tell() - 8
+            f.seek(4)
+            f.write(struct.pack("<I", size))
 
 
 def load_patch(path):
@@ -411,12 +430,13 @@ def main():
     for stem, seed, variant, index in jobs:
         x = render(patch, seed, variant, index)
         path = os.path.join(args.out, stem + ".wav")
-        write_wav(path, x)
+        loop = bool(patch.get("duration"))
+        write_wav(path, x, loop)
         expect = dict(patch.get("expect") or {})
         if variant and "lufs" in expect:  # variants are deliberately up to vary.gain_db quieter
             lo, hi = expect["lufs"]
             expect["lufs"] = [lo - patch.get("vary", {}).get("gain_db", 0), hi]
-        metrics, issues = doctor.analyze(x, SR, expect)
+        metrics, issues = doctor.analyze(x, SR, expect, loop)
         print(doctor.report(path, metrics, issues))
         if args.png:
             doctor.write_png(x, SR, os.path.join(args.out, stem + ".png"))

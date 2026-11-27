@@ -36,7 +36,7 @@ Same request, "a coin pickup sound". The doctor report and spectrogram are what 
 - **Recipes.** Layered patches (transient + body + tail) built from sound-design practice and sfxr's own presets.
 - **Synth.** A click-proof synth with band-limited oscillators, envelopes that always end at zero, DC removal, LUFS-matched loudness and tail trimming.
 - **Sample pipeline.** For real-world foley, it finds CC0 recordings on Freesound, cuts out the cleanest single hits, and layers them as *shared impact + surface texture + small room*.
-- **Doctor.** Measures peak, LUFS, crest, brightness and harsh/aliasing energy, then draws a **spectrogram PNG**. Claude reads that picture to check its own work. It reads WAV (including float), OGG and MP3.
+- **Doctor.** Measures peak and true peak, LUFS, crest, brightness and harsh/aliasing energy, then draws a **spectrogram PNG**. Claude reads that picture to check its own work. It also checks **intent**: which way the pitch moves (a jump must rise, a hit must fall), attack and decay, how many hits it holds, whether a loop clicks at its seam, and whether a set of variants is evenly loud. It reads WAV (including float), OGG and MP3.
 - **Preview.** Lays sounds out the way the game plays them (gallop, walk, sequence), old vs new, so **your ears** make the final call.
 - **Typo-proof patches.** An unknown key fails with "did you mean 'filters'?" instead of silently producing a wrong sound.
 
@@ -52,6 +52,14 @@ In Claude Code:
 ```
 
 Or copy `skills/game-sfx/` into `~/.claude/skills/`.
+
+**Other agents** (Codex, Cursor, Gemini CLI, Copilot, OpenCode and more) read the same [Agent Skills](https://github.com/agentskills/agentskills) format:
+
+```
+npx skills add GhazaGG/Game-Sound-Effect-for-Claude
+```
+
+Add `-a codex` (or `cursor`, `claude-code`...) to pick the agent.
 
 ## Use
 
@@ -74,8 +82,9 @@ python skills/game-sfx/scripts/doctor.py path/to/your/*.wav --png
 
 ```
 coin_cartoon.wav  0.594s
-  peak -6.4 dBFS | -16.0 LUFS | crest 12.1 dB | centroid 3452 Hz
+  peak -6.4 dBFS (true -6.1) | -16.0 LUFS (max momentary -14.2) | crest 12.1 dB | centroid 3452 Hz
   energy <80Hz 0% | 2-5kHz 41% | >16kHz 0.0% | lead 0 ms
+  attack 5 ms | decay 400 ms | hits 1 | pitch rising +7.1 st (994->1495 Hz)
   OK no problems found
 ```
 
@@ -123,7 +132,7 @@ request → synth or samples?
 ## Privacy & network
 
 - **Offline by default.** `sfx.py`, `doctor.py`, `slice.py` and `preview.py` never touch the network. They read and write only the files you point them at.
-- **`freesound.py` is the only script that goes online.** It calls `https://freesound.org/apiv2` (search, sound info) and downloads the preview files it links to. It sends nothing else: no telemetry, no project files.
+- **`freesound.py` is the only script that goes online.** It calls `https://freesound.org/apiv2` (search, similar sounds, sound info) and downloads the preview files it links to. It sends nothing else: no telemetry, no project files.
 - **Your Freesound key** is read from the `FREESOUND_API_KEY` environment variable. On Windows, if it isn't in the environment, it is read from the user's registry environment. The key is sent only to freesound.org in the `Authorization` header and is never printed or written to disk.
 - **External programs:** `ffmpeg` / `ffprobe` (if installed) decode non-WAV audio. They are called with argument lists, never through a shell.
 
@@ -132,10 +141,11 @@ request → synth or samples?
 - [x] Click-proof synth, doctor and spectrograms
 - [x] CC0 sample pipeline (Freesound search, hit slicer, hybrid foley layers)
 - [x] Game-rhythm A/B previews
+- [x] Intent checks: pitch direction, true peak, loop seams, set loudness; loop points in the WAV
 - [ ] More recipes approved by ear (explosion, laser, magic, footsteps per surface)
 - [ ] OGG export and engine import snippets
-- [ ] Optional AI backends for realistic sounds (ElevenLabs, Stable Audio Open)
-- [ ] Web demo page: prompt → sound, side by side with a naive beep
+- [ ] Optional AI backends for realistic sounds (ElevenLabs SFX v3, Stable Audio 3)
+- [x] [Web demo page](https://ghazagg.github.io/Game-Sound-Effect-for-Claude/): every recipe playable, side by side with a naive beep
 
 ## Contributing
 

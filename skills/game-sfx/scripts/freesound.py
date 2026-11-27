@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Find and fetch CC0 recordings from Freesound. Python 3.8+ stdlib only.
 
-  python freesound.py search "horse hooves gravel" [--n 15] [--max-duration 60] [--any-license]
+  python freesound.py search "horse hooves gravel" [--n 15] [--max-duration 60] [--any-license] [--single] [--dry]
+  python freesound.py similar 434804 [--n 15] [--single] [--dry]
   python freesound.py get 434804 631829 -o sfx/sources
+
+`similar` ranks CC0 sounds by how close they sound to a good find (Freesound's LAION-CLAP space),
+so one usable hit leads to more of the same instead of guessing keywords.
+--single keeps one-event recordings (easier to slice), --dry drops reverberant ones.
 
 Needs FREESOUND_API_KEY (free: https://freesound.org/apiv2/apply). `get` saves the
 high-quality preview (OGG) as <id>_<name>.ogg and appends a line to CREDITS.md
@@ -41,9 +46,15 @@ def call(path, **params):
         return json.load(r)
 
 
-def search(query, n=15, max_duration=60, any_license=False):
+def search(query="", n=15, max_duration=60, any_license=False, single=False, dry=False, similar_to=None):
     flt = f"duration:[0 TO {max_duration}]" + ("" if any_license else ' license:"Creative Commons 0"')
-    return call("/search/text/", query=query, filter=flt, fields=FIELDS, sort="score", page_size=n)["results"]
+    flt += " single_event:true" * single + " reverbness:false" * dry
+    params = dict(query=query, filter=flt, fields=FIELDS, page_size=n)
+    if similar_to:  # results come back ordered by closeness to that sound
+        params.update(similar_to=similar_to, similarity_space="laion_clap")
+    else:
+        params["sort"] = "score"
+    return call("/search/", **params)["results"]
 
 
 def get(ids, out):
@@ -69,17 +80,23 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("search")
     s.add_argument("query")
-    s.add_argument("--n", type=int, default=15)
-    s.add_argument("--max-duration", type=float, default=60)
-    s.add_argument("--any-license", action="store_true", help="include non-CC0 results (check terms yourself)")
+    m = sub.add_parser("similar")
+    m.add_argument("id", type=int)
+    for p in (s, m):
+        p.add_argument("--n", type=int, default=15)
+        p.add_argument("--max-duration", type=float, default=60)
+        p.add_argument("--any-license", action="store_true", help="include non-CC0 results (check terms yourself)")
+        p.add_argument("--single", action="store_true", help="only recordings of a single event")
+        p.add_argument("--dry", action="store_true", help="skip reverberant recordings")
     g = sub.add_parser("get")
     g.add_argument("ids", nargs="+")
     g.add_argument("-o", "--out", default="sfx/sources")
     args = ap.parse_args()
     sys.stdout.reconfigure(errors="replace")  # titles carry emoji; Windows consoles can't print them
 
-    if args.cmd == "search":
-        for r in search(args.query, args.n, args.max_duration, args.any_license):
+    if args.cmd in ("search", "similar"):
+        query, like = (args.query, None) if args.cmd == "search" else ("", args.id)
+        for r in search(query, args.n, args.max_duration, args.any_license, args.single, args.dry, like):
             lic = "CC0" if "zero" in r["license"] else r["license"].rstrip("/").split("/")[-2]
             print(f"{r['id']:>7}  {r['duration']:6.1f}s  {r['avg_rating']:.1f}*({r['num_ratings']})  {r['num_downloads']:>6}dl  {lic:<6} "
                   f"{r['name'][:55]}  [{', '.join(r['tags'][:6])}]")

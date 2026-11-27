@@ -18,8 +18,8 @@ Scripts live next to this file (Python 3.8+):
 | Script | Job | Needs |
 |---|---|---|
 | `scripts/sfx.py` | Render a JSON patch: synth layers, sample layers, or both | stdlib |
-| `scripts/doctor.py` | Check any sound file and draw a spectrogram | stdlib; ffmpeg for float WAV, OGG, MP3 |
-| `scripts/freesound.py` | Search and download CC0 recordings | `FREESOUND_API_KEY` |
+| `scripts/doctor.py` | Check any sound file (level, true peak, pitch direction, hits, loop seam, set loudness) and draw a spectrogram | stdlib; ffmpeg for float WAV, OGG, MP3 |
+| `scripts/freesound.py` | Search CC0 recordings, find ones that sound like a good find, download | `FREESOUND_API_KEY` |
 | `scripts/slice.py` | Cut clean single hits out of a recording | ffmpeg for non-WAV sources |
 | `scripts/preview.py` | Lay sounds out as the game plays them (gallop, walk, sequence), optionally old vs new | stdlib |
 
@@ -96,6 +96,8 @@ You can also go **hybrid**: a `"wave": "sample"` layer inside a synth patch play
    - Needs `FREESOUND_API_KEY`. The key is free: https://freesound.org/apiv2/apply. Ask the user to set it; never ask them to paste it into chat.
    - The search ANDs every word, so start broad ("hooves", "horse trot") and narrow afterwards.
    - Prefer high rating × downloads, and titles that name the exact surface.
+   - `--single` keeps recordings of one event (easy to slice). `--dry` drops reverberant ones, whose room would repeat on every hit.
+   - **Found one good recording? Ask for more like it** instead of guessing keywords: `freesound.py similar <id>` ranks CC0 sounds by how close they sound (Freesound's LAION-CLAP space). Four similar recordings give four believable variants.
 2. **Download**: `python <skill>/scripts/freesound.py get <id> <id> -o sfx/sources`. This saves the HQ previews and appends to `sfx/sources/CREDITS.md`.
 3. **List the hits** in each recording: `python <skill>/scripts/slice.py sfx/sources/<file> --list`. Each hit is scored on:
    - `peak`: loudness relative to the loudest hit.
@@ -125,9 +127,9 @@ Limits to tell the user about:
 3. **Render with a picture** into a preview folder while you iterate:
    `python <skill>/scripts/sfx.py sfx/patches/<name>.json -o sfx/preview --png`
    Once it's right, render the final version (without `--png`) with `-o <audio folder>`. `sfx/preview/` is scratch space, so suggest adding it to `.gitignore`.
-4. **Read the doctor report and open the PNG.** Fix every FAIL/WARN. Check the picture matches intent: the pitch moves the right way, the transient is at the start, the tail dies out.
+4. **Read the doctor report and open the PNG.** Fix every FAIL/WARN. Check the numbers and the picture match intent: the `pitch` line moves the right way, `hits` is the number of events you meant, the attack is short for impacts, the tail dies out.
 5. **Iterate** 1-3 times, changing one thing at a time. Tell the user what you changed and why in sound terms ("lowered the thump to 60 Hz for more weight"). Then make a `preview.py` file and let them listen.
-6. **Variants** for anything heard often (footsteps, hits, pickups): `--variants 4` writes `name_01..04.wav` with pitch/gain variation from the patch's `vary`. Play them round-robin in the game, never the same one twice in a row.
+6. **Variants** for anything heard often (footsteps, hits, pickups): `--variants 4` writes `name_01..04.wav` with pitch/gain variation from the patch's `vary`. Then check they sit together: `doctor.py <out>/name_*.wav --set` flags any variant more than 1.5 dB off the others, which players hear as one step being louder. Play them round-robin in the game, never the same one twice in a row.
 7. **Wire it up** in the engine (see Delivery) and keep the patch JSON in the repo so the sound can be tweaked later.
 
 Audit sounds the user already has: `python <skill>/scripts/doctor.py assets/sfx/*.wav --png`.
@@ -154,7 +156,7 @@ Audit sounds the user already has: `python <skill>/scripts/doctor.py assets/sfx/
   ],
   "master": {"lufs": -16, "peak_db": -1, "highpass": 150},
   "vary": {"pitch": 1, "gain_db": 1},
-  "expect": {"duration": [0.2, 0.4], "centroid": [1500, 6000]}
+  "expect": {"pitch": "rising", "duration": [0.2, 0.4], "centroid": [1500, 6000]}
 }
 ```
 
@@ -176,7 +178,7 @@ Audit sounds the user already has: `python <skill>/scripts/doctor.py assets/sfx/
 | `duration` | Fixed length in seconds, for loops. Leave it null for one-shots: the tail is trimmed at -60 dB. |
 | `master` | Final high-pass (Hz), loudness target (`lufs`), and peak ceiling (`peak_db`); the quieter of the two wins. `reverb`: `{"mix": 0.1, "decay": 0.4}` adds a small room. Loops wrap their reverb tail seamlessly. |
 | `vary` | Variant spread: ±semitones for the whole sound, and up to -dB. Only used with `--variants`. |
-| `expect` | Ranges the doctor enforces as FAIL: `duration`, `centroid`, `lufs`, `lead_ms`, `tail_ms`. |
+| `expect` | What the doctor enforces as FAIL. `pitch`: `rising`, `falling` or `steady` (the net move, ±1 semitone). Ranges `[lo, hi]` for any metric: `duration`, `centroid`, `lufs`, `mmax`, `true_peak_db`, `attack_ms`, `decay_ms`, `hits`, `lead_ms`, `tail_ms`. Always set `pitch` when the sound has a direction, so a wrong sweep can't pass. |
 
 ## Rules that make SFX sound good
 
@@ -229,6 +231,12 @@ Starting points. Values are typical ranges; ✓ marks a tested recipe in `recipe
 ## Reading the doctor
 
 - **peak / LUFS**: the level. LUFS is perceived loudness; compare it against the loudness ladder above.
+- **true**: true peak, the waveform's height between samples. Above -1 dBTP it clips once the file is encoded to OGG/MP3. `sfx.py` keeps its output under the ceiling; recordings and old files may not be.
+- **max momentary**: the loudest 400 ms. For one-shots it is closer to how loud the sound hits than the whole-file LUFS.
+- **attack / decay**: rise time (10% to 90%) and fall to 40 dB down, for the loudest event. Impacts and clicks attack in 0-5 ms; a 30 ms attack on a hit sounds soft.
+- **hits**: how many separate events. A one-shot is 1. More than planned means a double trigger or a smeared transient; a gallop loop should show its footfalls.
+- **pitch**: the net movement in semitones from the start to the end, with the frequencies. `untracked` means noise, a chord or a very short sound, which is normal for clicks, noise hits and foley.
+- **loop seam** (loops only): how hard the wrap point jumps, compared with the file's own biggest steps. Above 2 the loop clicks on every repeat.
 - **crest**: peak-to-RMS ratio. Below 6 dB the sound is flat or droning (no transient). Above 20 dB it is mostly a spike with weak body.
 - **centroid**: the brightness centre of gravity. UI 1-4 kHz, pickups 1.5-5 kHz, impacts 150-1500 Hz, explosions below 800 Hz, gallops and footsteps 200-1500 Hz.
 - **energy bands**: below 80 Hz is weight or rumble. 2-5 kHz above 50% is harsh. Above 16 kHz above 5% means aliasing or hiss.
@@ -240,7 +248,7 @@ Starting points. Values are typical ranges; ✓ marks a tested recipe in `recipe
 ## Delivery
 
 - Keep the defaults: WAV, 16-bit, 44.1 kHz, mono. Every engine imports it, and mono is right for anything positional. Stereo is only for UI and music stingers.
-- **Godot**: import the WAV. For loops, set loop mode in the Import dock.
+- **Godot**: import the WAV. Loops rendered by `sfx.py` (a patch with `duration`) carry loop points in a `smpl` chunk, and Godot's default loop mode "Detect From WAV" picks them up. Unreal reads them too. The doctor recognises such files as loops on its own; pass `--loop` for loops without one.
 - **Unity**: use the WAV; Unity compresses it on import. Check "Loop" on the AudioSource. To load clips by name from code (`Resources.Load<AudioClip>("Audio/Hooves/hoof_Dirt_01")`), they must live under `Assets/Resources/`. Otherwise, assign them to serialized `AudioClip` fields. If you keep a synth fallback, make a project check fail when it is used, so a missing file can't silently ship the placeholder.
 - **Unreal**: import the WAV directly.
 - **Web / Phaser / Howler**: convert with `ffmpeg -i x.wav -c:a libvorbis -q:a 5 x.ogg` and add an `.m4a` fallback for Safari. Never use MP3 for loops (the encoder adds a gap).

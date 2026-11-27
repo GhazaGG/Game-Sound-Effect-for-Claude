@@ -111,7 +111,7 @@
     "pitch": 0.5,
     "gain_db": 1
   },
-  "expect": {
+  "expect": {"pitch": "rising", 
     "duration": [
       0.4,
       1.2
